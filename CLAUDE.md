@@ -1,0 +1,47 @@
+# StockView Plugin
+
+美股持股儀表板（像 Seeking Alpha 的持股清單）：即時報價含盤前盤後、損益、估值區間、華爾街評級、價格警示。
+從之前的 Dataview 儀表板（Portfolio 筆記＋dataviewjs）改寫成正式外掛：不用 Dataview、BRAT 自動更新、iPad 可用；和 Language Learning 是兩個獨立外掛。
+
+## 硬性限制
+- 必須能在 iOS 執行：manifest isDesktopOnly=false，禁用 Node API (fs, path, process)
+- 檔案操作只用 Vault API；網路只用 requestUrl()，不用 fetch
+- 金鑰（Finnhub）只放 app.secretStorage（id "stockview-finnhub"），不得寫入 data.json、不得寫進筆記（Vault 會同步到 Dropbox）
+- 只用免費資料；不要加 Seeking Alpha Quant Rating（使用者說沒用）
+- 不要用假的 User-Agent 或其他方式繞過網站的機器人檢查
+
+## 資料
+- 持股：設定的資料夾（預設 Portfolio，含子資料夾）每檔一篇筆記，frontmatter：ticker、shares、cost（每股平均成本）、low、high（估值下限／上限＝警示線）；格式和舊 Dataview 儀表板相同
+- shares 空白＝只追蹤（觀察名單，不算損益）；同一檔分好幾篇：股數相加、成本加權平均、上下限用路徑排序第一篇有填的（mergeHoldings）
+- 新增／編輯／刪除也可以在儀表板做（HoldingModal、DeleteHoldingModal）：新增建立筆記（含買進理由、估值想法、紀錄三段）；編輯只改 frontmatter；刪除用 fileManager.trashFile（照 Obsidian 的刪除設定）；分在多篇的不能在視窗改
+- 報價（src/quote.ts）：Yahoo chart API（query1…/v8/finance/chart/<代號>?interval=1m&range=1d&includePrePost=true），每檔一次請求，同時最多 4 個（feed.pool）；session 依 meta.currentTradingPeriod；盤前／盤後價＝最後一根有價格的 1 分 K 落在 pre／post 區間
+- 匯率：TWD=X，只在總計用台幣或有台股（.TW／.TWO）時抓，10 分鐘一次；沒抓到暫用 32 並標示
+- 華爾街評級（src/ratings.ts）：Finnhub /stock/recommendation 最新一期，分數 1＝強力買進…5＝強力賣出（≤1.5／≤2.5／≤3.5／≤4.5）；只有美股代號（isUsTicker）；快取在 localStorage stockview:ratings，12 小時一次；依序抓、間隔 1.1 秒（免費版每分鐘 60 次）；401／403 後 1 小時不再試；只在儀表板開著時更新
+- 設定在 data.json（src/config.ts，sanitizeSettings 只留認得的欄位）；排序、評級快取、警示狀態與紀錄在 localStorage（每台裝置各自）
+
+## 更新與警示
+- src/feed.ts：儀表板開著時開盤（含盤前盤後）每 refreshSec（預設 5 秒）、收盤每 closedRefreshSec（預設 60 秒）；沒開而且有警示線、開了「儀表板沒開也檢查」時背景 30 秒／收盤 5 分鐘；還沒有報價時當作開盤
+- Yahoo 429：間隔加倍（從 30 秒起）最多 5 分鐘，成功就恢復；全部連不到時顯示離線
+- 警示（src/alarm.ts 純函式＋src/alarms.ts 狀態）：價格 ≥ 上限或 ≤ 下限響一次；之後要回到界線內 bufferPct%（預設 1%）才重新待命；同一檔 cooldownMin（預設 30 分鐘）內不再響，冷卻中沒響的仍待命；改了界線就重新待命；last=null 表示還沒響過
+- 警示價格：alarmUseExtended（預設開）且不是盤中時用盤前／盤後價（calc.effectivePrice）；估值區間的位置也用同一個價格
+- 警示狀態與紀錄（最近 50 筆）存 localStorage，重開不重響；不在清單上的狀態不刪（啟動時筆記快取可能還沒好）
+- 通知：Notice（點一下才關）＋提示音（src/sound.ts Web Audio，iOS 要在點擊時 unlockAudio，儀表板任何點擊都會呼叫）＋桌機系統 Notification
+
+## 畫面（src/view.ts）
+- 狀態列（盤前／盤中／盤後／收盤、更新時間、間隔）、提示（429、匯率暫用、Finnhub 金鑰）、四張卡片（總市值、總損益、今日損益、總成本）、表格、警示紀錄（details）
+- 表格欄：股票（點代號 → 選單：編輯／打開筆記／刪除）、現價、今日漲跌、盤前／盤後（相對現價的 %）、股數／成本、市值、未實現損益、估值區間（色條＋位置＋「突破上限／跌破下限／區間內 xx%」，已響過加 🔕）、華爾街評級
+- 排序：點表頭（存 localStorage stockview:sort），持股在前、觀察名單在後；預設市值由大到小
+- 漲跌顏色 colorStyle：tw 紅漲綠跌（預設）／us 綠漲紅跌
+- 每次更新只重畫內容不換外框（表格左右捲動位置留著）；第一欄 sticky；窄螢幕按鈕只留圖示、卡片兩欄
+- 設定頁不放 SecretComponent：一列摘要＋「設定…」開 FinnhubKeyModal（金鑰欄不用 type=password；只留英數字）；也有指令「設定 Finnhub 金鑰」
+
+## 專案慣例
+- 原始碼在 src/；`npm run build` 先跑 tsc 再用 esbuild 輸出 main.js
+- `npm run check` 掃描是否違反上面的硬性限制；每次改完都要跑
+- `npm test`：test/*.test.ts 用 esbuild 打包（obsidian 換成 test/mocks/obsidian.cjs，DOM 用 jsdom）後由 node --test 執行；每次改完都要跑，新功能要加測試
+- 測試資料只用編的數字和代號（repo 是公開的）
+- 實機測試狀態記在 TESTING.md；新功能完成要加進「未實機測試」
+- GitHub Action 每次推送都跑 build、check、test；推到 main 且測試通過、該版本還沒有 release 才發布（main.js、manifest.json、styles.css）
+- 發布：同時改 manifest.json 與 versions.json 的版本號，推到 main；iPad 用 BRAT 追蹤 MalionRay/stockview
+- 部署到電腦：把 main.js、manifest.json、styles.css 複製到 `<vault>/.obsidian/plugins/stockview/`
+- 回覆使用者用繁體中文（台灣用語）

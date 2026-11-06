@@ -1,0 +1,58 @@
+name: Test and release Obsidian plugin
+
+# 每次推送都跑編譯、規則檢查與測試；
+# 推到 main 且 manifest.json 的版本還沒有 release 時，測試通過才發布。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check
+      - run: npm test
+
+  release:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read version
+        id: v
+        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Skip if already released
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "Release ${{ steps.v.outputs.version }} exists, skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm ci
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm run build
+      - if: steps.exists.outputs.skip == 'false'
+        name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.v.outputs.version }}" main.js manifest.json styles.css \
+            --target "${GITHUB_SHA}" --title "${{ steps.v.outputs.version }}" --notes "Built from ${GITHUB_SHA}"
