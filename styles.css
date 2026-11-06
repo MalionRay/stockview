@@ -194,3 +194,42 @@
 	.sv-cards { grid-template-columns: repeat(2, 1fr); }
 	.sv-card-value { font-size: 1.15em; }
 }
+
+/* 清單分頁 */
+.sv-lists {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+	margin-bottom: 10px;
+}
+.sv-list-tab {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	border-radius: 999px;
+	padding: 3px 12px;
+	height: auto;
+	box-shadow: none;
+}
+.sv-list-tab.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.sv-list-count {
+	font-size: 0.85em;
+	opacity: 0.75;
+	font-variant-numeric: tabular-nums;
+}
+.sv-list-add, .sv-list-more {
+	border-radius: 999px;
+	padding: 3px 10px;
+	height: auto;
+	box-shadow: none;
+	background: transparent;
+	border: 1px dashed var(--background-modifier-border);
+	color: var(--text-muted);
+}
+.sv-list-more { border-style: solid; display: inline-flex; align-items: center; }
+.sv-list-more svg { width: 16px; height: 16px; }
+.sv-in-lists { font-size: 0.85em; color: var(--text-faint); max-width: 160px; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }

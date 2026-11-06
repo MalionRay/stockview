@@ -6,6 +6,8 @@ import { DEFAULT_SETTINGS } from "../src/config";
 import { Feed } from "../src/feed";
 import { Ratings, SECRET_FINNHUB } from "../src/ratings";
 import { DashboardView, LS_SORT } from "../src/view";
+import StockViewPlugin from "../src/main";
+import { LS_LIST } from "../src/config";
 import { makeApp } from "./helpers/app";
 import { DAY, chart, note } from "./fixtures";
 const ob = require("obsidian");
@@ -18,7 +20,12 @@ async function mount(files: [string, string][], opts: { key?: boolean; settings?
 	const plugin: any = { app, settings, alarms, opened: [] as string[] };
 	plugin.ratings = new Ratings(app, () => plugin.feed.emit());
 	plugin.feed = new Feed({ app, settings, alarms, ratings: plugin.ratings, viewOpen: () => true, onAlarm: () => undefined });
-	plugin.openHoldingModal = (h?: { ticker: string }) => plugin.opened.push("modal:" + (h?.ticker ?? "new"));
+	for (const k of ["selectedList", "selectList", "defaultAddList"]) plugin[k] = (StockViewPlugin.prototype as any)[k].bind(plugin);
+	plugin.openHoldingModal = (o: { existing?: { ticker: string; list: string }; list?: string; prefill?: { ticker?: string } } = {}) =>
+		plugin.opened.push(o.existing ? `modal:${o.existing.list}/${o.existing.ticker}` : `modal:new@${o.list ?? ""}${o.prefill?.ticker ? ":" + o.prefill.ticker : ""}`);
+	plugin.openListModal = (r?: string) => plugin.opened.push("list:" + (r ?? "new"));
+	plugin.openDeleteListModal = (l: string) => plugin.opened.push("dellist:" + l);
+	plugin.openMoveModal = (h: { ticker: string }) => plugin.opened.push("move:" + h.ticker);
 	plugin.openDeleteModal = (h: { ticker: string }) => plugin.opened.push("delete:" + h.ticker);
 	plugin.openNote = (p: string) => plugin.opened.push("note:" + p);
 	plugin.openSettings = () => plugin.opened.push("settings");
@@ -35,7 +42,7 @@ test("沒有股票：顯示說明和新增按鈕", async () => {
 	const { el, plugin } = await mount([]);
 	assert.match(text(el), /還沒有股票/);
 	(el.querySelector(".sv-empty button") as HTMLButtonElement).click();
-	assert.deepEqual(plugin.opened, ["modal:new"]);
+	assert.deepEqual(plugin.opened, ["modal:new@"]);
 	assert.deepEqual(plugin.syncCalls, [60_000], "打開儀表板就同步一次（拉別台裝置的改動）");
 	const refresh = [...el.querySelectorAll(".sv-btns button")].find((b) => b.getAttribute("aria-label") === "重新整理") as HTMLButtonElement;
 	refresh.click();
@@ -110,4 +117,63 @@ test("沒有金鑰：提示可以填 Finnhub；警示紀錄顯示與清除", asy
 	assert.match(text(el), /突破上限 🔕/);
 	(el.querySelector(".sv-log button") as HTMLButtonElement).click();
 	assert.equal((el.querySelector(".sv-log") as HTMLElement).style.display, "none");
+});
+
+test("多個清單：分頁、切換、全部合併、新增到目前清單、清單選單", async () => {
+	ob.__setRequestHandler(async () => ({ status: 200, json: chart({ price: 100, prev: 100 }) }));
+	const { el, plugin, ls } = await mount([
+		["Portfolio/帳戶A/NVDA.md", note({ ticker: "NVDA", shares: 10, cost: 50 })],
+		["Portfolio/帳戶B/NVDA.md", note({ ticker: "NVDA", shares: 5, cost: 80 })],
+		["Portfolio/帳戶B/AMD.md", note({ ticker: "AMD", shares: 1, cost: 100 })],
+	]);
+	await plugin.feed.round();
+	const tabs = () => [...el.querySelectorAll(".sv-list-tab")].map(text);
+	assert.deepEqual(tabs(), ["全部2", "帳戶A1", "帳戶B2"], "主清單沒有股票就不顯示");
+	assert.match(text(el.querySelector(".sv-list-tab.is-active")!), /^全部/);
+	const nvda = () => [...el.querySelectorAll("tbody tr")].find((tr) => text(tr).startsWith("NVDA"))!;
+	assert.match(text(nvda()), /帳戶A、帳戶B/, "全部裡標出在哪些清單");
+	assert.match(text(el.querySelector(".sv-card")!), /\$1,600\.00/, "全部：NVDA 15 股＋AMD 1 股");
+	assert.equal(el.querySelector(".sv-list-more"), null, "全部沒有改名／刪除");
+
+	(el.querySelector("tbody .sv-ticker") as HTMLButtonElement).click();
+	let menu = (globalThis as any).__lastMenu;
+	assert.deepEqual(
+		menu.items.map((i: { title: string }) => i.title),
+		["編輯（帳戶A）…", "編輯（帳戶B）…", "打開筆記（帳戶A）", "打開筆記（帳戶B）"],
+	);
+
+	(el.querySelectorAll(".sv-list-tab")[2] as HTMLButtonElement).click();
+	assert.equal(ls.get(LS_LIST), "帳戶B");
+	assert.equal(el.querySelectorAll("tbody tr").length, 2);
+	assert.match(text(el.querySelector(".sv-card")!), /\$600\.00/);
+	(el.querySelector(".sv-btns .mod-cta") as HTMLButtonElement).click();
+	assert.equal(plugin.opened.at(-1), "modal:new@帳戶B", "新增到目前的清單");
+
+	const amd = [...el.querySelectorAll("tbody .sv-ticker")].find((b) => text(b) === "AMD") as HTMLButtonElement;
+	amd.click();
+	menu = (globalThis as any).__lastMenu;
+	assert.deepEqual(
+		menu.items.map((i: { title: string }) => i.title),
+		["編輯…", "打開筆記", "移到其他清單…", "加到其他清單…", "從「帳戶B」刪除…"],
+	);
+	menu.items[3].cb();
+	assert.equal(plugin.opened.at(-1), "modal:new@帳戶A:AMD");
+
+	(el.querySelector(".sv-list-more") as HTMLButtonElement).click();
+	menu = (globalThis as any).__lastMenu;
+	menu.items[1].cb();
+	assert.equal(plugin.opened.at(-1), "dellist:帳戶B");
+	(el.querySelector(".sv-list-add") as HTMLButtonElement).click();
+	assert.equal(plugin.opened.at(-1), "list:new");
+});
+
+test("選的清單不存在了（被刪或改名）就回到全部", async () => {
+	ob.__setRequestHandler(async () => ({ status: 200, json: chart({}) }));
+	const { el, plugin, ls } = await mount([
+		["Portfolio/A/X.md", note({ ticker: "X", shares: 1 })],
+		["Portfolio/B/Y.md", note({ ticker: "Y", shares: 1 })],
+	]);
+	ls.set(LS_LIST, "不見了");
+	await plugin.feed.round();
+	assert.match(text(el.querySelector(".sv-list-tab.is-active")!), /^全部/);
 });

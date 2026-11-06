@@ -16,6 +16,7 @@ export interface AlarmCfg {
 
 export interface AlarmEvent {
 	ticker: string;
+	list?: string; // 哪個清單的警示線（"" 是主清單）
 	kind: "high" | "low";
 	line: number;
 	price: number;
@@ -62,5 +63,6 @@ export function checkAlarm(
 
 export function alarmText(e: AlarmEvent): string {
 	const p = e.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
-	return e.kind === "high" ? `${e.ticker} 突破上限 ${e.line}，現價 ${p}` : `${e.ticker} 跌破下限 ${e.line}，現價 ${p}`;
+	const where = e.list ? `（${e.list}）` : "";
+	return e.kind === "high" ? `${e.ticker} 突破上限 ${e.line}，現價 ${p}${where}` : `${e.ticker} 跌破下限 ${e.line}，現價 ${p}${where}`;
 }

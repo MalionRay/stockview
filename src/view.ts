@@ -5,6 +5,7 @@ import { alarmText } from "./alarm";
 import { Row, rangeState, toBase, totals } from "./calc";
 import { VIEW_TYPE } from "./config";
 import * as F from "./format";
+import { ALL_LISTS, Holding, MAIN_LIST, listLabel } from "./holdings";
 import type StockViewPlugin from "./main";
 import { SESSION_LABEL, Session, isUsTicker } from "./quote";
 import { ratingInfo } from "./ratings";
@@ -34,6 +35,7 @@ const COLS: Col[] = [
 export class DashboardView extends ItemView {
 	private unsub: (() => void) | null = null;
 	private statusEl!: HTMLElement;
+	private listsEl!: HTMLElement;
 	private noticeEl!: HTMLElement;
 	private cardsEl!: HTMLElement;
 	private tableEl!: HTMLTableElement;
@@ -76,13 +78,14 @@ export class DashboardView extends ItemView {
 			b.onclick = fn;
 			return b;
 		};
-		btn("plus", "新增股票", () => this.plugin.openHoldingModal(), true);
+		btn("plus", "新增股票", () => this.plugin.openHoldingModal({ list: this.plugin.defaultAddList() }), true);
 		btn("refresh-cw", "重新整理", () => {
 			this.plugin.feed.kick();
 			void this.plugin.sync.now(15_000); // 順便拉別台裝置新增的股票
 		});
 		btn("settings", "設定", () => this.plugin.openSettings());
 
+		this.listsEl = root.createDiv("sv-lists");
 		this.noticeEl = root.createDiv("sv-notices");
 		this.cardsEl = root.createDiv("sv-cards");
 		this.emptyEl = root.createDiv("sv-empty");
@@ -109,13 +112,15 @@ export class DashboardView extends ItemView {
 		const s = p.settings;
 		const feed = p.feed;
 		this.contentEl.dataset.color = s.colorStyle;
-		const rows = feed.rows();
+		const sel = p.selectedList();
+		const rows = feed.rows(sel);
+		this.renderLists(sel);
 
 		// 狀態列
 		this.statusEl.empty();
 		// 市場狀態：有任何一檔在盤中就顯示盤中，其次盤前／盤後
 		const order: Session[] = ["regular", "pre", "post", "closed"];
-		const sessions = new Set(rows.map((r) => r.q?.session).filter((x): x is Session => !!x));
+		const sessions = new Set(feed.rows().map((r) => r.q?.session).filter((x): x is Session => !!x));
 		const ses = order.find((x) => sessions.has(x));
 		if (ses) this.statusEl.createSpan({ cls: `sv-session sv-s-${ses}`, text: SESSION_LABEL[ses] });
 		this.statusEl.createSpan({ text: feed.lastRound ? `更新 ${F.clock(feed.lastRound)}` : "讀取中…" });
@@ -135,6 +140,34 @@ export class DashboardView extends ItemView {
 		this.renderCards(t, rows);
 		this.renderTable(rows);
 		this.renderLog();
+	}
+
+	/** 清單分頁：全部（有兩個以上清單時）、各清單（股票數）、＋ 新清單、⋯（改名／刪除目前清單）。 */
+	private renderLists(sel: string): void {
+		const p = this.plugin;
+		const feed = p.feed;
+		const vis = feed.visibleLists();
+		this.listsEl.empty();
+		const tab = (key: string, label: string, count: number | null) => {
+			const b = this.listsEl.createEl("button", { cls: `sv-list-tab${key === sel ? " is-active" : ""}` });
+			b.createSpan({ text: label });
+			if (count !== null) b.createSpan({ cls: "sv-list-count", text: String(count) });
+			b.onclick = () => p.selectList(key);
+		};
+		if (vis.length > 1) tab(ALL_LISTS, "全部", new Set(feed.holdings.map((h) => h.ticker)).size);
+		for (const l of vis) tab(l, listLabel(l), feed.holdings.filter((h) => h.list === l).length);
+		const add = this.listsEl.createEl("button", { cls: "sv-list-add", text: "＋ 新清單", attr: { "aria-label": "新增清單" } });
+		add.onclick = () => p.openListModal();
+		if (sel !== ALL_LISTS && sel !== MAIN_LIST) {
+			const more = this.listsEl.createEl("button", { cls: "sv-list-more", attr: { "aria-label": "清單選項" } });
+			setIcon(more, "more-horizontal");
+			more.onclick = (e) => {
+				const m = new Menu();
+				m.addItem((i) => i.setTitle(`「${sel}」改名…`).setIcon("pencil").onClick(() => p.openListModal(sel)));
+				m.addItem((i) => i.setTitle(`刪除清單「${sel}」…`).setIcon("trash").onClick(() => p.openDeleteListModal(sel)));
+				m.showAtMouseEvent(e);
+			};
+		}
 	}
 
 	private renderCards(t: ReturnType<typeof totals>, rows: Row[]): void {
@@ -203,9 +236,15 @@ export class DashboardView extends ItemView {
 		this.emptyEl.toggle(rows.length === 0);
 		this.tableEl.toggle(rows.length > 0);
 		if (!rows.length) {
-			this.emptyEl.createEl("p", { text: `還沒有股票。按「新增股票」，或在「${p.settings.folder}」資料夾放筆記（frontmatter 寫 ticker、shares、cost、low、high）。` });
+			const sel = p.selectedList();
+			this.emptyEl.createEl("p", {
+				text:
+					p.feed.holdings.length && sel !== ALL_LISTS
+						? `「${listLabel(sel)}」還沒有股票。`
+						: `還沒有股票。按「新增股票」，或在「${p.settings.folder}」資料夾放筆記（frontmatter 寫 ticker、shares、cost、low、high；子資料夾是不同的清單）。`,
+			});
 			const b = this.emptyEl.createEl("button", { cls: "mod-cta", text: "新增股票" });
-			b.onclick = () => p.openHoldingModal();
+			b.onclick = () => p.openHoldingModal({ list: p.defaultAddList() });
 			return;
 		}
 		this.tableEl.empty();
@@ -240,6 +279,8 @@ export class DashboardView extends ItemView {
 		const err = p.feed.errors.get(r.h.ticker);
 		if (err) name.createDiv({ cls: "sv-err", text: err });
 		if (r.h.shares === null) name.createDiv({ cls: "sv-tag", text: "觀察" });
+		// 「全部」裡標出在哪些清單
+		if (p.selectedList() === ALL_LISTS && p.feed.visibleLists().length > 1) name.createDiv({ cls: "sv-in-lists", text: r.h.lists.map(listLabel).join("、") });
 
 		// 現價
 		tr.createEl("td", { cls: "sv-num sv-price", text: F.price(q?.price ?? null, r.cur) });
@@ -295,7 +336,7 @@ export class DashboardView extends ItemView {
 			return;
 		}
 		const st = rangeState(r.alarmPrice, low, high);
-		const w = this.plugin.alarms.waiting(r.h.ticker);
+		const w = this.plugin.alarms.waiting(r.h.lists, r.h.ticker);
 		const box = td.createDiv("sv-range");
 		const bar = box.createDiv("sv-bar");
 		if (st.pos !== null) {
@@ -314,12 +355,38 @@ export class DashboardView extends ItemView {
 		}
 	}
 
+	/** 點代號的選單。「全部」裡同一檔在好幾個清單時，每個清單各一項「編輯」。 */
 	private rowMenu(e: MouseEvent, r: Row): void {
 		const p = this.plugin;
+		const feed = p.feed;
+		const perList = r.h.lists
+			.map((l) => feed.holdings.find((h) => h.list === l && h.ticker === r.h.ticker))
+			.filter((h): h is Holding => !!h);
+		const vis = feed.visibleLists();
+		const many = vis.length > 1;
 		const m = new Menu();
-		m.addItem((i) => i.setTitle("編輯…").setIcon("pencil").onClick(() => p.openHoldingModal(r.h)));
-		m.addItem((i) => i.setTitle(r.h.paths.length > 1 ? `打開筆記（共 ${r.h.paths.length} 篇）` : "打開筆記").setIcon("file-text").onClick(() => p.openNote(r.h.paths[0])));
-		m.addItem((i) => i.setTitle("刪除…").setIcon("trash").onClick(() => p.openDeleteModal(r.h)));
+		if (perList.length > 1) {
+			for (const h of perList) m.addItem((i) => i.setTitle(`編輯（${listLabel(h.list)}）…`).setIcon("pencil").onClick(() => p.openHoldingModal({ existing: h })));
+			for (const h of perList) m.addItem((i) => i.setTitle(`打開筆記（${listLabel(h.list)}）`).setIcon("file-text").onClick(() => p.openNote(h.paths[0])));
+		} else {
+			const h = perList[0] ?? r.h;
+			m.addItem((i) => i.setTitle("編輯…").setIcon("pencil").onClick(() => p.openHoldingModal({ existing: h })));
+			m.addItem((i) => i.setTitle(h.paths.length > 1 ? `打開筆記（共 ${h.paths.length} 篇）` : "打開筆記").setIcon("file-text").onClick(() => p.openNote(h.paths[0])));
+			if (many) m.addItem((i) => i.setTitle("移到其他清單…").setIcon("folder-input").onClick(() => p.openMoveModal(h)));
+		}
+		const has = new Set(feed.holdings.filter((h) => h.ticker === r.h.ticker).map((h) => h.list));
+		const others = vis.filter((l) => !has.has(l));
+		if (others.length)
+			m.addItem((i) =>
+				i
+					.setTitle("加到其他清單…")
+					.setIcon("copy-plus")
+					.onClick(() => p.openHoldingModal({ list: others[0], prefill: { ticker: r.h.ticker, low: r.h.low, high: r.h.high } })),
+			);
+		if (perList.length <= 1) {
+			const h = perList[0] ?? r.h;
+			m.addItem((i) => i.setTitle(many ? `從「${listLabel(h.list)}」刪除…` : "刪除…").setIcon("trash").onClick(() => p.openDeleteModal(h)));
+		}
 		m.showAtMouseEvent(e);
 	}
 

@@ -52,15 +52,36 @@ test("沒設界線、沒有價格都不響；改了界線重新待命", () => {
 test("Alarms：狀態與紀錄存在 localStorage，重開不重響", () => {
 	const { app, ls } = makeApp();
 	const a = new Alarms(app);
-	const ev = a.check([{ ...h, price: 210 }], cfg, 1000);
+	const ev = a.check([{ ...h, list: "", price: 210 }], cfg, 1000);
 	assert.equal(ev.length, 1);
 	assert.match(alarmText(ev[0]), /NVDA 突破上限 200，現價 210/);
-	assert.equal(a.waiting("NVDA").high, true);
+	assert.equal(a.waiting([""], "NVDA").high, true);
 	assert.ok(ls.get(LS_ALARM_STATE));
 	assert.equal((ls.get(LS_ALARM_LOG) as unknown[]).length, 1);
 	const b = new Alarms(app);
-	assert.equal(b.check([{ ...h, price: 210 }], cfg, 50 * MIN).length, 0);
+	assert.equal(b.check([{ ...h, list: "", price: 210 }], cfg, 50 * MIN).length, 0);
 	assert.equal(b.log.length, 1);
 	b.clearLog();
 	assert.equal(new Alarms(app).log.length, 0);
+});
+
+test("不同清單各自判斷；同一條線同時響只通知一次；不同線各自通知", () => {
+	const { app } = makeApp();
+	const a = new Alarms(app);
+	const ev = a.check(
+		[
+			{ list: "", ticker: "NVDA", low: null, high: 200, price: 260 },
+			{ list: "觀察", ticker: "NVDA", low: null, high: 200, price: 260 },
+			{ list: "AI", ticker: "NVDA", low: null, high: 250, price: 260 },
+		],
+		cfg,
+		1000,
+	);
+	assert.deepEqual(
+		ev.map((e) => `${e.list ?? ""}:${e.line}`),
+		[":200", "AI:250"],
+	);
+	assert.match(alarmText(ev[1]), /（AI）$/);
+	assert.equal(a.waiting(["觀察"], "NVDA").high, true, "沒通知的那個清單也記成已響過，不會下一輪再響");
+	assert.equal(a.waiting(["別的"], "NVDA").high, false);
 });

@@ -30,6 +30,29 @@ export function makeApp(files: FileMap = new Map()) {
 	};
 	const tfile = (p: string) => new ob.TFile(p, size(p));
 	const dirs = new Set<string>();
+	const isDir = (p: string) => dirs.has(p) || [...files.keys()].some((k) => k.startsWith(p + "/"));
+	const tfolder = (p: string): any => {
+		const f = new ob.TFolder();
+		f.path = p;
+		f.name = p.split("/").pop();
+		const pre = p + "/";
+		const names = new Set<string>();
+		for (const k of [...files.keys(), ...dirs]) if (k.startsWith(pre)) names.add(k.slice(pre.length).split("/")[0]);
+		f.children = [...names].map((n) => (files.has(pre + n) ? tfile(pre + n) : tfolder(pre + n)));
+		return f;
+	};
+	const movePrefix = (from: string, to: string) => {
+		for (const k of [...files.keys()])
+			if (k === from || k.startsWith(from + "/")) {
+				files.set(to + k.slice(from.length), files.get(k)!);
+				files.delete(k);
+			}
+		for (const d of [...dirs])
+			if (d === from || d.startsWith(from + "/")) {
+				dirs.add(to + d.slice(from.length));
+				dirs.delete(d);
+			}
+	};
 	const secrets = new Map<string, string>();
 	const app: any = {
 		secretStorage: { getSecret: (k: string) => secrets.get(k) ?? null, setSecret: (k: string, v: string) => void secrets.set(k, v), listSecrets: () => [...secrets.keys()] },
@@ -44,12 +67,16 @@ export function makeApp(files: FileMap = new Map()) {
 				fn(fm);
 				files.set(f.path, dumpFm(fm) + s.replace(/^---\n[\s\S]*?\n---\n/, ""));
 			},
-			trashFile: async (f: any) => files.delete(f.path),
+			trashFile: async (f: any) => {
+				for (const k of [...files.keys()]) if (k === f.path || k.startsWith(f.path + "/")) files.delete(k);
+				for (const d of [...dirs]) if (d === f.path || d.startsWith(f.path + "/")) dirs.delete(d);
+			},
+			renameFile: async (f: any, to: string) => movePrefix(f.path, to),
 		},
 		vault: {
 			getFiles: () => [...files.keys()].map(tfile),
 			getMarkdownFiles: () => [...files.keys()].filter((p) => p.endsWith(".md")).map(tfile),
-			getAbstractFileByPath: (p: string) => (files.has(p) ? tfile(p) : null),
+			getAbstractFileByPath: (p: string) => (files.has(p) ? tfile(p) : isDir(p) ? tfolder(p) : null),
 			read: async (f: any) => String(files.get(f.path)),
 			cachedRead: async (f: any) => String(files.get(f.path)),
 			readBinary: async (f: any) => files.get(f.path),

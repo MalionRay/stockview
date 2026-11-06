@@ -5,7 +5,7 @@ import type { AlarmEvent } from "./alarm";
 import type { Alarms } from "./alarms";
 import { computeRow, Row } from "./calc";
 import { BG_CLOSED_SEC, BG_OPEN_SEC, FX_SYMBOL, FX_TTL, StockViewSettings } from "./config";
-import { Holding, readHoldings } from "./holdings";
+import { ALL_LISTS, Holding, mergeAcrossLists, readHoldings, readLists, visibleLists } from "./holdings";
 import { fetchQuote, isUsTicker, Quote, QuoteError } from "./quote";
 import type { Ratings } from "./ratings";
 
@@ -32,7 +32,8 @@ export async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>
 export class Feed {
 	quotes = new Map<string, Quote>();
 	errors = new Map<string, string>();
-	holdings: Holding[] = [];
+	holdings: Holding[] = []; // 每個清單各自的持股（同一清單同一檔已合併）
+	lists: string[] = [];
 	fx: number | null = null;
 	fxAt = 0;
 	lastRound = 0;
@@ -63,9 +64,22 @@ export class Feed {
 
 	reload(): void {
 		this.holdings = readHoldings(this.host.app, this.host.settings.folder);
+		this.lists = readLists(this.host.app, this.host.settings.folder, this.holdings);
 	}
 
-	rows(): Row[] {
+	/** 畫面上看得到的清單（主清單沒有股票、又有其他清單時不算）。 */
+	visibleLists(): string[] {
+		return visibleLists(this.lists, this.holdings);
+	}
+
+	/** 某個清單的列；ALL_LISTS（預設）＝全部清單，同一檔合併成一列。 */
+	rows(list: string = ALL_LISTS): Row[] {
+		const hs = list === ALL_LISTS ? mergeAcrossLists(this.holdings) : this.holdings.filter((h) => h.list === list);
+		return hs.map((h) => computeRow(h, this.quotes.get(h.ticker) ?? null, this.host.settings.alarmUseExtended));
+	}
+
+	/** 每個清單各自的列（警示用）。 */
+	private listRows(): Row[] {
 		return this.holdings.map((h) => computeRow(h, this.quotes.get(h.ticker) ?? null, this.host.settings.alarmUseExtended));
 	}
 
@@ -161,7 +175,7 @@ export class Feed {
 			this.lastRound = now();
 			const s = this.host.settings;
 			if (s.alarmEnabled) {
-				const items = this.rows().map((r) => ({ ticker: r.h.ticker, low: r.h.low, high: r.h.high, price: r.alarmPrice }));
+				const items = this.listRows().map((r) => ({ list: r.h.list, ticker: r.h.ticker, low: r.h.low, high: r.h.high, price: r.alarmPrice }));
 				events = this.host.alarms.check(items, { bufferPct: s.alarmBufferPct, cooldownMin: s.alarmCooldownMin }, now());
 				if (events.length) this.host.onAlarm(events);
 			}

@@ -11,9 +11,14 @@
 - 不要用假的 User-Agent 或其他方式繞過網站的機器人檢查
 
 ## 資料
-- 持股：設定的資料夾（預設 Portfolio，含子資料夾）每檔一篇筆記，frontmatter：ticker、shares、cost（每股平均成本）、low、high（估值下限／上限＝警示線）；格式和舊 Dataview 儀表板相同
-- shares 空白＝只追蹤（觀察名單，不算損益）；同一檔分好幾篇：股數相加、成本加權平均、上下限用路徑排序第一篇有填的（mergeHoldings）
-- 新增／編輯／刪除也可以在儀表板做（HoldingModal、DeleteHoldingModal）：新增建立筆記（含買進理由、估值想法、紀錄三段）；編輯只改 frontmatter；刪除用 fileManager.trashFile（照 Obsidian 的刪除設定）；分在多篇的不能在視窗改
+- 持股：設定的資料夾（預設 Portfolio）每檔一篇筆記，frontmatter：ticker、shares、cost（每股平均成本）、low、high（估值下限／上限＝警示線）；格式和舊 Dataview 儀表板相同
+- 多個清單（v0.2.0）：清單＝資料夾底下第一層子資料夾（更深的算在第一層）；直接放在資料夾裡的是「主清單」（MAIN_LIST ""，不能改名刪除；沒有股票又有其他清單時不顯示，visibleLists）；空的子資料夾也是清單（readLists 讀 TFolder.children）
+- 同一檔可以在好幾個清單，各有自己的股數、成本、上下限；清單內同一檔分好幾篇才合併（mergeHoldings，key＝清單|代號）：股數相加、成本加權平均、上下限用路徑排序第一篇有填的；「全部」（ALL_LISTS "*"）跨清單合併成一列（mergeAcrossLists），lists 記在哪些清單
+- 畫面目前的清單存 localStorage stockview:list（每台裝置各自；不存在就回到全部，只有一個清單就是那個）；新增股票預設放目前的清單（看全部時放第一個）
+- 清單名稱 checkListName：不能空白、最多 30 字、不能有 \ / : * ? " < > | # ^ [ ]、不能 . 開頭、不能叫「主清單」「全部」、不分大小寫不能重複
+- shares 空白＝只追蹤（觀察，不算損益）
+- 新增／編輯／刪除也可以在儀表板做（HoldingModal、DeleteHoldingModal）：新增建立筆記（含買進理由、估值想法、紀錄三段）；編輯只改 frontmatter；刪除用 fileManager.trashFile（照 Obsidian 的刪除設定）；同一清單分在多篇的不能在視窗改
+- 移到其他清單（MoveHoldingModal，fileManager.renameFile 搬筆記；目的地已有這檔就不行）；加到其他清單（HoldingModal 預填代號與上下限）；清單新增／改名（ListModal，renameFile 搬資料夾）／刪除（DeleteListModal，整個資料夾 trashFile）
 - 報價（src/quote.ts）：Yahoo chart API（query1…/v8/finance/chart/<代號>?interval=1m&range=1d&includePrePost=true），每檔一次請求，同時最多 4 個（feed.pool）；session 依 meta.currentTradingPeriod；盤前／盤後價＝最後一根有價格的 1 分 K 落在 pre／post 區間
 - 匯率：TWD=X，只在總計用台幣或有台股（.TW／.TWO）時抓，10 分鐘一次；沒抓到暫用 32 並標示
 - 華爾街評級（src/ratings.ts）：Finnhub /stock/recommendation 最新一期，分數 1＝強力買進…5＝強力賣出（≤1.5／≤2.5／≤3.5／≤4.5）；只有美股代號（isUsTicker）；快取在 localStorage stockview:ratings，12 小時一次；依序抓、間隔 1.1 秒（免費版每分鐘 60 次）；401／403 後 1 小時不再試；只在儀表板開著時更新
@@ -22,7 +27,7 @@
 ## 更新與警示
 - src/feed.ts：儀表板開著時開盤（含盤前盤後）每 refreshSec（預設 5 秒）、收盤每 closedRefreshSec（預設 60 秒）；沒開而且有警示線、開了「儀表板沒開也檢查」時背景 30 秒／收盤 5 分鐘；還沒有報價時當作開盤
 - Yahoo 429：間隔加倍（從 30 秒起）最多 5 分鐘，成功就恢復；全部連不到時顯示離線
-- 警示（src/alarm.ts 純函式＋src/alarms.ts 狀態）：價格 ≥ 上限或 ≤ 下限響一次；之後要回到界線內 bufferPct%（預設 1%）才重新待命；同一檔 cooldownMin（預設 30 分鐘）內不再響，冷卻中沒響的仍待命；改了界線就重新待命；last=null 表示還沒響過
+- 警示（src/alarm.ts 純函式＋src/alarms.ts 狀態）：每個清單的每一檔各自判斷（key＝清單|代號），同一輪同一檔同一條線在好幾個清單都響時只通知一次（其他清單也記成已響）；非主清單的通知後面加（清單名）；價格 ≥ 上限或 ≤ 下限響一次；之後要回到界線內 bufferPct%（預設 1%）才重新待命；同一檔 cooldownMin（預設 30 分鐘）內不再響，冷卻中沒響的仍待命；改了界線就重新待命；last=null 表示還沒響過
 - 警示價格：alarmUseExtended（預設開）且不是盤中時用盤前／盤後價（calc.effectivePrice）；估值區間的位置也用同一個價格
 - 警示狀態與紀錄（最近 50 筆）存 localStorage，重開不重響；不在清單上的狀態不刪（啟動時筆記快取可能還沒好）
 - 通知：Notice（點一下才關）＋提示音（src/sound.ts Web Audio，iOS 要在點擊時 unlockAudio，儀表板任何點擊都會呼叫）＋桌機系統 Notification
@@ -34,6 +39,7 @@
 - 不在筆記被改（metadataCache changed）時觸發：同步下載的檔案也會觸發，會多同步一次
 
 ## 畫面（src/view.ts）
+- 清單分頁（全部＋各清單與股票數＋「＋ 新清單」；選了主清單以外的清單時有 ⋯ 改名／刪除）；全部裡每列標出在哪些清單；點代號的選單：同一檔在多個清單時每個清單各一項「編輯（清單）」「打開筆記（清單）」，否則編輯／打開筆記／移到其他清單／加到其他清單／從「清單」刪除
 - 狀態列（盤前／盤中／盤後／收盤、更新時間、間隔）、提示（429、匯率暫用、Finnhub 金鑰）、四張卡片（總市值、總損益、今日損益、總成本）、表格、警示紀錄（details）
 - 表格欄：股票（點代號 → 選單：編輯／打開筆記／刪除）、現價、今日漲跌、盤前／盤後（相對現價的 %）、股數／成本、市值、未實現損益、估值區間（色條＋位置＋「突破上限／跌破下限／區間內 xx%」，已響過加 🔕）、華爾街評級
 - 排序：點表頭（存 localStorage stockview:sort），持股在前、觀察名單在後；預設市值由大到小

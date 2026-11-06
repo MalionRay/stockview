@@ -2,6 +2,7 @@
 import type { Base } from "./calc";
 
 export const VIEW_TYPE = "stockview-dashboard";
+export const LS_LIST = "stockview:list"; // 這台裝置目前看的清單（"*"＝全部）
 
 export interface StockViewSettings {
 	folder: string; // 股票筆記所在資料夾

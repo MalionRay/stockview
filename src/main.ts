@@ -2,10 +2,10 @@
 import { Notice, Platform, Plugin, TFile, WorkspaceLeaf, normalizePath } from "obsidian";
 import { AlarmEvent, alarmText } from "./alarm";
 import { Alarms } from "./alarms";
-import { DEFAULT_SETTINGS, StockViewSettings, VIEW_TYPE, sanitizeSettings } from "./config";
+import { DEFAULT_SETTINGS, LS_LIST, StockViewSettings, VIEW_TYPE, sanitizeSettings } from "./config";
 import { Feed } from "./feed";
-import type { Holding } from "./holdings";
-import { DeleteHoldingModal, HoldingModal } from "./modals";
+import { ALL_LISTS, Holding, MAIN_LIST } from "./holdings";
+import { DeleteHoldingModal, DeleteListModal, HoldingModal, HoldingModalOpts, ListModal, MoveHoldingModal } from "./modals";
 import { Ratings } from "./ratings";
 import { FinnhubKeyModal, StockViewSettingTab } from "./settings";
 import { beep } from "./sound";
@@ -37,7 +37,8 @@ export default class StockViewPlugin extends Plugin {
 		this.registerView(VIEW_TYPE, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this));
 		this.addRibbonIcon("line-chart", "StockView", () => void this.openDashboard());
 		this.addCommand({ id: "open", name: "打開儀表板", callback: () => void this.openDashboard() });
-		this.addCommand({ id: "add", name: "新增股票", callback: () => this.openHoldingModal() });
+		this.addCommand({ id: "add", name: "新增股票", callback: () => this.openHoldingModal({ list: this.defaultAddList() }) });
+		this.addCommand({ id: "add-list", name: "新增清單", callback: () => this.openListModal() });
 		this.addCommand({ id: "refresh", name: "重新整理報價", callback: () => this.feed.kick() });
 		this.addCommand({ id: "finnhub-key", name: "設定 Finnhub 金鑰", callback: () => new FinnhubKeyModal(this.app, this).open() });
 		this.addSettingTab(new StockViewSettingTab(this.app, this));
@@ -92,12 +93,46 @@ export default class StockViewPlugin extends Plugin {
 		await ws.revealLeaf(leaf);
 	}
 
-	openHoldingModal(h?: Holding): void {
-		new HoldingModal(this.app, this, h).open();
+	openHoldingModal(opts: HoldingModalOpts = {}): void {
+		new HoldingModal(this.app, this, opts).open();
 	}
 
 	openDeleteModal(h: Holding): void {
 		new DeleteHoldingModal(this.app, this, h).open();
+	}
+
+	openMoveModal(h: Holding): void {
+		new MoveHoldingModal(this.app, this, h).open();
+	}
+
+	openListModal(rename?: string): void {
+		new ListModal(this.app, this, rename).open();
+	}
+
+	openDeleteListModal(list: string): void {
+		new DeleteListModal(this.app, this, list).open();
+	}
+
+	/** 這台裝置目前看的清單；不存在就退回「全部」（只有一個清單時就是那個清單）。 */
+	selectedList(): string {
+		const vis = this.feed.visibleLists();
+		const v = this.app.loadLocalStorage(LS_LIST);
+		if (typeof v === "string" && (v === ALL_LISTS ? vis.length > 1 : vis.includes(v))) return v;
+		return vis.length > 1 ? ALL_LISTS : (vis[0] ?? MAIN_LIST);
+	}
+
+	/** null＝回到全部。 */
+	selectList(list: string | null): void {
+		this.app.saveLocalStorage(LS_LIST, list ?? ALL_LISTS);
+		this.feed.reload(); // 剛建立／改名的清單要馬上看得到
+		this.feed.emit();
+	}
+
+	/** 新增股票預設放的清單：正在看某個清單就放那裡，看「全部」時放第一個清單。 */
+	defaultAddList(): string {
+		const sel = this.selectedList();
+		if (sel !== ALL_LISTS) return sel;
+		return this.feed.visibleLists()[0] ?? MAIN_LIST;
 	}
 
 	async openNote(path: string): Promise<void> {
