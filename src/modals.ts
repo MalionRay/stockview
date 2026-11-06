@@ -87,6 +87,7 @@ export class HoldingModal extends Modal {
 					}
 					new Notice(h ? `已更新 ${this.v.ticker}` : `已新增 ${this.v.ticker}`);
 					this.close();
+					this.plugin.sync.soon();
 					// 等筆記快取更新再重抓
 					window.setTimeout(() => this.plugin.feed.kick(), 400);
 				}),
@@ -141,6 +142,7 @@ export class DeleteHoldingModal extends Modal {
 						}
 						new Notice(`已刪除 ${this.h.ticker}`);
 						this.close();
+						this.plugin.sync.soon();
 						window.setTimeout(() => this.plugin.feed.kick(), 400);
 					}),
 			);

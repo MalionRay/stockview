@@ -1,7 +1,7 @@
 {
   "id": "stockview",
   "name": "StockView",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "1.11.4",
   "description": "Stock portfolio dashboard: live prices with pre/post-market, P/L, valuation ranges, analyst ratings and price alarms. Works on desktop and iPad.",
   "author": "MalionRay",

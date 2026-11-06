@@ -9,6 +9,7 @@ import { DeleteHoldingModal, HoldingModal } from "./modals";
 import { Ratings } from "./ratings";
 import { FinnhubKeyModal, StockViewSettingTab } from "./settings";
 import { beep } from "./sound";
+import { SyncTrigger } from "./sync";
 import { DashboardView } from "./view";
 
 export default class StockViewPlugin extends Plugin {
@@ -16,11 +17,13 @@ export default class StockViewPlugin extends Plugin {
 	feed!: Feed;
 	ratings!: Ratings;
 	alarms!: Alarms;
+	sync!: SyncTrigger;
 	private reloadTimer: number | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.alarms = new Alarms(this.app);
+		this.sync = new SyncTrigger(this.app, () => this.settings.autoSync);
 		this.ratings = new Ratings(this.app, () => this.feed.emit());
 		this.feed = new Feed({
 			app: this.app,
@@ -58,6 +61,7 @@ export default class StockViewPlugin extends Plugin {
 
 	onunload(): void {
 		this.feed?.stop();
+		this.sync?.cancel();
 		if (this.reloadTimer !== null) window.clearTimeout(this.reloadTimer);
 	}
 

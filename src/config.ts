@@ -16,6 +16,7 @@ export interface StockViewSettings {
 	alarmCooldownMin: number;
 	alarmSound: boolean;
 	backgroundAlarm: boolean; // 儀表板沒開時也在背景檢查
+	autoSync: boolean; // 改了清單、打開儀表板時觸發 Remotely Save 同步
 }
 
 export const DEFAULT_SETTINGS: StockViewSettings = {
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: StockViewSettings = {
 	alarmCooldownMin: 30,
 	alarmSound: true,
 	backgroundAlarm: true,
+	autoSync: true,
 };
 
 /** 背景檢查（儀表板沒開）時的間隔：開盤 30 秒、收盤 5 分鐘。 */

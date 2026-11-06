@@ -77,7 +77,10 @@ export class DashboardView extends ItemView {
 			return b;
 		};
 		btn("plus", "新增股票", () => this.plugin.openHoldingModal(), true);
-		btn("refresh-cw", "重新整理", () => this.plugin.feed.kick());
+		btn("refresh-cw", "重新整理", () => {
+			this.plugin.feed.kick();
+			void this.plugin.sync.now(15_000); // 順便拉別台裝置新增的股票
+		});
 		btn("settings", "設定", () => this.plugin.openSettings());
 
 		this.noticeEl = root.createDiv("sv-notices");
@@ -92,6 +95,7 @@ export class DashboardView extends ItemView {
 		this.unsub = this.plugin.feed.subscribe(() => this.render());
 		this.render();
 		this.plugin.feed.kick();
+		void this.plugin.sync.now(60_000);
 	}
 
 	async onClose(): Promise<void> {

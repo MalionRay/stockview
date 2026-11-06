@@ -22,6 +22,8 @@ async function mount(files: [string, string][], opts: { key?: boolean; settings?
 	plugin.openDeleteModal = (h: { ticker: string }) => plugin.opened.push("delete:" + h.ticker);
 	plugin.openNote = (p: string) => plugin.opened.push("note:" + p);
 	plugin.openSettings = () => plugin.opened.push("settings");
+	plugin.syncCalls = [] as number[];
+	plugin.sync = { now: async (gap: number) => (plugin.syncCalls.push(gap), true), soon: () => undefined };
 	const view = new DashboardView({ app } as never, plugin);
 	await view.onOpen();
 	return { view, plugin, el: view.contentEl, ls };
@@ -34,6 +36,10 @@ test("沒有股票：顯示說明和新增按鈕", async () => {
 	assert.match(text(el), /還沒有股票/);
 	(el.querySelector(".sv-empty button") as HTMLButtonElement).click();
 	assert.deepEqual(plugin.opened, ["modal:new"]);
+	assert.deepEqual(plugin.syncCalls, [60_000], "打開儀表板就同步一次（拉別台裝置的改動）");
+	const refresh = [...el.querySelectorAll(".sv-btns button")].find((b) => b.getAttribute("aria-label") === "重新整理") as HTMLButtonElement;
+	refresh.click();
+	assert.deepEqual(plugin.syncCalls, [60_000, 15_000]);
 });
 
 test("持股：總計卡片、表格、盤後價、估值區間、評級", async () => {

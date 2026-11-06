@@ -27,6 +27,12 @@
 - 警示狀態與紀錄（最近 50 筆）存 localStorage，重開不重響；不在清單上的狀態不刪（啟動時筆記快取可能還沒好）
 - 通知：Notice（點一下才關）＋提示音（src/sound.ts Web Audio，iOS 要在點擊時 unlockAudio，儀表板任何點擊都會呼叫）＋桌機系統 Notification
 
+## 同步（src/sync.ts，v0.1.1）
+- 持股筆記靠 Remotely Save 同步（使用者設定每 5 分鐘自動同步、不同步 .obsidian）；為了讓別台裝置快一點看到，外掛主動觸發 app.commands.executeCommandById('remotely-save:start-sync')（非正式內部 API，失效時只靠它的定時同步）
+- 新增／編輯／刪除股票後 2 秒（soon，連續改只同步一次）；打開儀表板（60 秒內不重複）；按重新整理（15 秒內不重複）
+- Remotely Save 正在同步（內部 isSyncing）時先等它結束（最多 60 秒）再觸發；離線、沒裝 Remotely Save、設定 autoSync 關閉時不做事
+- 不在筆記被改（metadataCache changed）時觸發：同步下載的檔案也會觸發，會多同步一次
+
 ## 畫面（src/view.ts）
 - 狀態列（盤前／盤中／盤後／收盤、更新時間、間隔）、提示（429、匯率暫用、Finnhub 金鑰）、四張卡片（總市值、總損益、今日損益、總成本）、表格、警示紀錄（details）
 - 表格欄：股票（點代號 → 選單：編輯／打開筆記／刪除）、現價、今日漲跌、盤前／盤後（相對現價的 %）、股數／成本、市值、未實現損益、估值區間（色條＋位置＋「突破上限／跌破下限／區間內 xx%」，已響過加 🔕）、華爾街評級

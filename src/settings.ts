@@ -129,6 +129,15 @@ export class StockViewSettingTab extends PluginSettingTab {
 						await save();
 					}),
 			);
+		new Setting(el)
+			.setName("自動同步（Remotely Save）")
+			.setDesc("新增／修改／刪除股票後、打開儀表板或按重新整理時，自動觸發 Remotely Save 同步，別台裝置很快就看得到。沒裝 Remotely Save 就不會做任何事。")
+			.addToggle((t) =>
+				t.setValue(s.autoSync).onChange(async (v) => {
+					s.autoSync = v;
+					await save();
+				}),
+			);
 		new Setting(el).setName("漲跌顏色").addDropdown((d) =>
 			d
 				.addOptions({ tw: "紅漲綠跌（台灣）", us: "綠漲紅跌（美國）" })
