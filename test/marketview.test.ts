@@ -48,14 +48,14 @@ test("切換市場和期間：只抓那個市場；記住選擇", async () => {
 	tw.click();
 	await new Promise((r) => setTimeout(r, 0));
 	assert.equal(ls.get(LS_MARKET_TAB), "tw");
-	assert.deepEqual(calls, ["^TWII@1d", "^TWOII@1d", "TSM@1d", "EWT@1d"]);
-	assert.equal(el.querySelectorAll(".sv-mcard").length, 5);
+	assert.deepEqual(calls, ["^TWII@1d", "TSM@1d", "EWT@1d"]);
+	assert.equal(el.querySelectorAll(".sv-mcard").length, 4, "加權、台指期、台積電 ADR、MSCI 台灣");
 	assert.ok(el.querySelector(".sv-chart.sv-down"), "下跌的顏色");
 	const y1 = [...el.querySelectorAll(".sv-range-btn")].find((b) => text(b) === "1年") as HTMLButtonElement;
 	y1.click();
 	await new Promise((r) => setTimeout(r, 0));
 	assert.equal(ls.get(LS_MARKET_RANGE), "1y");
-	assert.deepEqual(calls.slice(4), ["^TWII@1y", "^TWOII@1y", "TSM@1y", "EWT@1y"]);
+	assert.deepEqual(calls.slice(3), ["^TWII@1y", "TSM@1y", "EWT@1y"]);
 	assert.match(text(el.querySelector(".sv-mcard")!), /1年來/);
 	await view.onClose();
 });
@@ -68,7 +68,11 @@ test("匯率頁：顯示幾台幣換一單位外幣；拿不到的卡片顯示�
 	(el.querySelectorAll(".sv-market-tabs .sv-list-tab")[6] as HTMLButtonElement).click();
 	await new Promise((r) => setTimeout(r, 0));
 	const cards = [...el.querySelectorAll(".sv-mcard")];
-	assert.equal(cards.length, 5);
+	assert.equal(cards.length, 8);
+	assert.deepEqual(
+		cards.map((c) => text(c.querySelector(".sv-mcard-name")!).replace(/[A-Z]+=X$/, "")),
+		["美元／台幣", "日圓／台幣", "人民幣／台幣", "韓元／台幣", "歐元／台幣", "英鎊／台幣", "瑞士法郎／台幣", "澳幣／台幣"],
+	);
 	assert.match(text(cards[0]), /美元／台幣TWD=X32\.500 台幣／1 美元\+0\.500（\+1\.56%）/);
 	assert.match(text(cards[1]), /20\.000 台幣／100 日圓/, "0.2 × 100");
 	assert.match(text(cards[3]), /韓元／台幣拿不到資料：Yahoo 沒有這個代號/);

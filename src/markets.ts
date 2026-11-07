@@ -36,7 +36,6 @@ export const MARKETS: Market[] = [
 		label: "台股",
 		items: [
 			{ symbol: "^TWII", name: "加權指數" },
-			{ symbol: "^TWOII", name: "櫃買指數" },
 			{ symbol: "TXF", name: "台指期（近月）", kind: "taifex" },
 			{ symbol: "TSM", name: "台積電 ADR" },
 			{ symbol: "EWT", name: "MSCI 台灣 ETF" },
@@ -87,6 +86,9 @@ export const MARKETS: Market[] = [
 			{ symbol: "CNYTWD=X", name: "人民幣／台幣", unit: "1 人民幣", fallback: { mul: ["TWD=X"], div: ["CNY=X"] } },
 			{ symbol: "KRWTWD=X", name: "韓元／台幣", unit: "1000 韓元", scale: 1000, fallback: { mul: ["TWD=X"], div: ["KRW=X"] } },
 			{ symbol: "EURTWD=X", name: "歐元／台幣", unit: "1 歐元", fallback: { mul: ["EURUSD=X", "TWD=X"], div: [] } },
+			{ symbol: "GBPTWD=X", name: "英鎊／台幣", unit: "1 英鎊", fallback: { mul: ["GBPUSD=X", "TWD=X"], div: [] } },
+			{ symbol: "CHFTWD=X", name: "瑞士法郎／台幣", unit: "1 瑞士法郎", fallback: { mul: ["TWD=X"], div: ["CHF=X"] } },
+			{ symbol: "AUDTWD=X", name: "澳幣／台幣", unit: "1 澳幣", fallback: { mul: ["AUDUSD=X", "TWD=X"], div: [] } },
 		],
 	},
 ];

@@ -71,6 +71,8 @@ test("交叉匯率：100 日圓＝台幣/美元 ÷ 日圓/美元 × 100；歐元
 		[21.3333, 20.25],
 	);
 	assert.equal(+s.base!.toFixed(4), 21.2);
+	const chf = parseSeries(chart({ bars: [[0, 0.8], [60, 0.8]], prev: 0.8 }), R1D);
+	assert.equal(+combineSeries("CHFTWD=X", [twd], [chf]).last!.toFixed(2), 40.5, "1 瑞士法郎＝32.4÷0.8");
 	const eur = parseSeries(chart({ bars: [[0, 1.1], [60, 1.2]], prev: 1.1 }), R1D);
 	const e = combineSeries("EURTWD=X", [eur, twd], []);
 	assert.equal(+e.last!.toFixed(3), 38.88);

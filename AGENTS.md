@@ -40,7 +40,7 @@
 
 ## 市場行情（src/markets.ts、src/chart.ts、src/marketview.ts，v0.3.0）
 - 另一個畫面（MARKET_VIEW "stockview-markets"；左側地球圖示、指令「打開市場行情」、儀表板「市場」按鈕；畫面上「持股」回儀表板）
-- 分頁：美股（^GSPC、^DJI、^IXIC、^SOX）、台股（^TWII、^TWOII）、日股（^N225、TOPIX 用 ETF 1306.T 代替）、陸股（000001.SS、399001.SZ、000300.SS）、韓股（^KS11、^KQ11）、歐股（^STOXX50E、^GDAXI、^FTSE、^FCHI）、匯率（美元、100 日圓、人民幣、1000 韓元、歐元對台幣）；使用者 2026-11-07 選的：只要指數走勢圖和匯率（不要個股圖、不要這些市場的持股）
+- 分頁：美股（^GSPC、^DJI、^IXIC、^SOX）、台股（^TWII；櫃買 ^TWOII 使用者實測拿不到，v0.4.1 拿掉）、日股（^N225、TOPIX 用 ETF 1306.T 代替）、陸股（000001.SS、399001.SZ、000300.SS）、韓股（^KS11、^KQ11）、歐股（^STOXX50E、^GDAXI、^FTSE、^FCHI）、匯率（美元、100 日圓、人民幣、1000 韓元、歐元、英鎊、瑞士法郎、澳幣對台幣；英鎊、澳幣備援用 GBPUSD=X／AUDUSD=X × TWD=X，瑞士法郎用 TWD=X ÷ CHF=X）；使用者 2026-11-07 選的：只要指數走勢圖和匯率（不要個股圖、不要這些市場的持股）
 - 期間 RANGES：1日（5m）、5日（15m）、1月（60m）、6月、今年、1年（1d）、5年（1wk）；整頁共用；分頁與期間存 localStorage stockview:market-tab／stockview:market-range
 - 資料：Yahoo chart API（range＋interval），parseSeries；基準＝chartPreviousClose（1日＝昨收，其他＝區間開始前），沒有就用第一點；1日 x 軸用交易時段（domain），其他依點的順序（跳過休市）
 - 交叉匯率代號（JPYTWD=X 等）拿不到時用美元匯率換算（fallback mul／div，combineSeries 取當時或之前最近的值）；429 不換算；顯示倍數 scale（日圓 100、韓元 1000）
