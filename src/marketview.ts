@@ -4,12 +4,13 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import { drawChart } from "./chart";
 import * as F from "./format";
 import type StockViewPlugin from "./main";
-import { MARKETS, Market, MarketData, MarketItem, RANGES, RangeDef, Series, fmtLevel, rangeOf, timeLabel } from "./markets";
+import { MARKETS, Market, MarketData, MarketItem, Point, RANGES, RangeDef, Series, fmtLevel, rangeOf, timeLabel } from "./markets";
+import { SESSION_TEXT, TxfQuote, TxfTape, fetchTaifex, txfMarket, txfSession } from "./taifex";
 
 export const MARKET_VIEW = "stockview-markets";
 export const LS_MARKET_TAB = "stockview:market-tab";
 export const LS_MARKET_RANGE = "stockview:market-range";
-const REFRESH_MS = 60_000;
+const TICK_MS = 30_000; // 台指期每 30 秒、1日走勢每 60 秒
 
 export class MarketsView extends ItemView {
 	data: MarketData;
@@ -19,11 +20,15 @@ export class MarketsView extends ItemView {
 	private noteEl!: HTMLElement;
 	private seq = 0;
 	private timer: number | null = null;
+	private ticks = 0;
+	private tape: TxfTape | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
 		private plugin: StockViewPlugin,
 		data?: MarketData,
+		private taifex: (market: "0" | "1") => Promise<TxfQuote> = fetchTaifex,
+		private now: () => number = () => Date.now() / 1000,
 	) {
 		super(leaf);
 		this.data = data ?? new MarketData();
@@ -69,13 +74,16 @@ export class MarketsView extends ItemView {
 		this.rangesEl = root.createDiv("sv-ranges");
 		this.noteEl = root.createDiv("sv-notices");
 		this.gridEl = root.createDiv("sv-market-grid");
-		root.createDiv({ cls: "sv-foot", text: "資料：Yahoo Finance（免費，台股、日股、陸股、韓股、歐股可能延遲 15～20 分鐘）· 時間是各交易所當地時間 · 不構成投資建議" });
+		root.createDiv({ cls: "sv-foot", text: "資料：Yahoo Finance（免費，台股、日股、陸股、韓股、歐股可能延遲 15～20 分鐘）；台指期：期交所網站公開資料 · 時間是各交易所當地時間 · 不構成投資建議" });
 		this.contentEl.dataset.color = this.plugin.settings.colorStyle;
+		this.tape = new TxfTape(this.app);
 		this.renderBars();
 		await this.load();
 		this.timer = window.setInterval(() => {
-			if (this.range().id === "1d") void this.load();
-		}, REFRESH_MS);
+			this.ticks++;
+			if (this.range().id === "1d" && this.ticks % 2 === 0) void this.load();
+			else if (this.market().items.some((i) => i.kind === "taifex")) void this.load(false, true);
+		}, TICK_MS);
 		this.registerInterval(this.timer);
 	}
 
@@ -110,32 +118,41 @@ export class MarketsView extends ItemView {
 	}
 
 	/** 抓目前市場、目前期間的所有項目；抓的時候先保留舊圖（變淡），不閃爍。 */
-	async load(force = false): Promise<void> {
-		const seq = ++this.seq;
+	async load(force = false, taifexOnly = false): Promise<void> {
+		// 只更新台指期時不打斷正在進行的整頁更新
+		const seq = taifexOnly ? this.seq : ++this.seq;
 		const m = this.market();
 		const r = this.range();
 		if (force) this.data.clear();
-		this.noteEl.empty();
+		if (!taifexOnly) this.noteEl.empty();
 		const cards = new Map<string, HTMLElement>();
 		// 同一個市場換期間：先留著舊圖（變淡）；換市場才清掉
 		if (this.gridEl.dataset.market !== m.id) this.gridEl.empty();
 		this.gridEl.dataset.market = m.id;
+		const items = taifexOnly ? m.items.filter((i) => i.kind === "taifex") : m.items;
 		for (const item of m.items) {
 			let card = Array.from(this.gridEl.children).find((c) => (c as HTMLElement).dataset.symbol === item.symbol) as HTMLElement | undefined;
 			if (!card) {
 				card = this.gridEl.createDiv({ cls: "sv-mcard", attr: { "data-symbol": item.symbol } });
-				const cached = this.data.cached(item, r);
+				const cached = item.kind ? null : this.data.cached(item, r);
 				if (cached) this.fillCard(card, item, m, r, cached);
 				else card.createDiv({ cls: "sv-mcard-loading", text: `${item.name}　讀取中…` });
 			}
-			card.addClass("sv-loading");
+			if (items.includes(item) && !item.kind) card.addClass("sv-loading");
 			cards.set(item.symbol, card);
 		}
 		let limited = false;
 		await Promise.all(
-			m.items.map(async (item) => {
+			items.map(async (item) => {
 				const card = cards.get(item.symbol)!;
 				try {
+					if (item.kind === "taifex") {
+						const q = await this.taifex(txfMarket(this.now()));
+						if (seq !== this.seq) return;
+						const pts = this.tape ? this.tape.add(q, this.now()) : [];
+						this.fillTaifexCard(card, item, q, pts);
+						return;
+					}
 					const s = await this.data.get(item, r);
 					if (seq !== this.seq) return;
 					this.fillCard(card, item, m, r, s);
@@ -150,6 +167,46 @@ export class MarketsView extends ItemView {
 			}),
 		);
 		if (seq === this.seq && limited) this.noteEl.createDiv({ cls: "sv-notice sv-warn", text: "Yahoo 請求太頻繁，過一兩分鐘再按重新整理" });
+	}
+
+	/** 台指期卡片：近月、比參考價、最高最低、成交時間；圖是這頁開著時記錄的價格。 */
+	fillTaifexCard(card: HTMLElement, item: MarketItem, q: TxfQuote, pts: Point[]): void {
+		card.empty();
+		card.removeClass("sv-loading");
+		const chg = q.last !== null && q.ref ? q.last - q.ref : null;
+		const pct = chg !== null && q.ref ? (chg / q.ref) * 100 : null;
+		const dir = F.dir(chg);
+		const ses = txfSession(this.now());
+		const top = card.createDiv("sv-mcard-top");
+		const name = top.createDiv("sv-mcard-name");
+		name.createSpan({ text: item.name });
+		name.createSpan({ cls: "sv-muted sv-mcard-sym", text: q.name });
+		top.createSpan({ cls: `sv-session sv-s-${ses === "closed" ? "closed" : "regular"}`, text: SESSION_TEXT[ses] });
+		const val = card.createDiv("sv-mcard-val");
+		val.createSpan({ cls: "sv-mcard-last", text: fmtLevel(q.last ?? q.ref) });
+		const c = card.createDiv(`sv-mcard-chg sv-${dir}`);
+		c.setText(`${F.signedNum(chg, 0)}（${F.pct(pct)}）`);
+		card.createSpan({ cls: "sv-muted sv-mcard-period", text: `${q.market === "1" ? "夜盤" : "日盤"}・比參考價` });
+		const info = [q.high !== null ? `最高 ${fmtLevel(q.high)}` : "", q.low !== null ? `最低 ${fmtLevel(q.low)}` : "", q.time ? `成交 ${q.time}` : ""].filter(Boolean).join("　");
+		if (info) card.createDiv({ cls: "sv-muted sv-mcard-info", text: info });
+		const r1d = rangeOf("1d");
+		if (pts.length > 1) {
+			drawChart(card, {
+				points: pts,
+				base: q.ref,
+				domain: null,
+				dir,
+				fmtValue: (v) => fmtLevel(v),
+				fmtTime: (t) => timeLabel(t, 8 * 3600, r1d, true),
+				axisStart: timeLabel(pts[0].t, 8 * 3600, r1d),
+				axisEnd: timeLabel(pts[pts.length - 1].t, 8 * 3600, r1d),
+				label: `${item.name} 這一盤的走勢`,
+			});
+		}
+		card.createDiv({
+			cls: "sv-muted sv-mcard-note",
+			text: pts.length > 1 ? "期交所資料・圖是這頁開著時記錄的・不受期間切換影響" : "期交所資料・打開這頁後開始記錄走勢・不受期間切換影響",
+		});
 	}
 
 	fillCard(card: HTMLElement, item: MarketItem, m: Market, r: RangeDef, s: Series): void {

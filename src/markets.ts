@@ -8,6 +8,7 @@ export interface MarketItem {
 	name: string;
 	scale?: number; // 匯率：1 單位外幣用幾個（日圓 100、韓元 1000）
 	unit?: string; // 匯率顯示用，例如「100 日圓」
+	kind?: "taifex"; // 台指期：資料來自期交所，不受期間切換影響
 	/** 這個代號拿不到時，用美元匯率換算：值＝mul 相乘 ÷ div 相乘 */
 	fallback?: { mul: string[]; div: string[] };
 }
@@ -36,6 +37,9 @@ export const MARKETS: Market[] = [
 		items: [
 			{ symbol: "^TWII", name: "加權指數" },
 			{ symbol: "^TWOII", name: "櫃買指數" },
+			{ symbol: "TXF", name: "台指期（近月）", kind: "taifex" },
+			{ symbol: "TSM", name: "台積電 ADR" },
+			{ symbol: "EWT", name: "MSCI 台灣 ETF" },
 		],
 	},
 	{

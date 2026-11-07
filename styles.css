@@ -342,3 +342,5 @@
 .sv-chart-tip-t { color: var(--text-muted); }
 .sv-chart-tip-pct { color: var(--text-muted); }
 .sv-markets .sv-head .sv-btns { margin-left: auto; }
+.sv-mcard-info { font-size: 0.8em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.sv-mcard-note { font-size: 0.75em; margin-top: 4px; }

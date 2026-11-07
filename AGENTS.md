@@ -47,6 +47,10 @@
 - 快取 MarketData：1日 1 分鐘、5日 5 分鐘、1月 15 分鐘、其他 30～60 分鐘；1日每分鐘自動更新；重新整理清快取；換期間時舊圖變淡保留不閃爍，換市場才清掉
 - 走勢圖 drawChart：2px 線（non-scaling-stroke）、10% 面積、基準線（1px 實線）、最後一點圓點、右側最高／最低、下方起訖時間（交易所當地時間，gmtoffset）；十字線＋提示框（時間、數值、比基準 %），pointer 事件，觸控 touch-action: pan-y；顏色跟漲跌（colorStyle）
 - 代號是依常識選的，開發環境連不到 Yahoo 沒實測；拿不到的卡片顯示原因，其他照常
+- 台股頁另有（v0.4.0）：台指期近月（src/taifex.ts）、台積電 ADR（TSM）、MSCI 台灣 ETF（EWT）；使用者 2026-11-07 要台股夜盤，選「兩個都加」
+- 台指期資料：期交所行情網頁用的公開資料 POST https://mis.taifex.com.tw/futures/api/getQuoteList（JSON：MarketType 0＝日盤／1＝夜盤、SymbolType F、KindID 1、CID TXF、RowSize 全部…），回 RtData.QuoteList；挑第一個名稱沒有「/」（跨月價差）且有價格的＝近月；CLastPrice、CRefPrice（參考價）、CHighPrice、CLowPrice、CTime（235958 → 23:59:58）；非正式介面，可能改格式或被擋（別人遇過 520），不加偽裝標頭
+- 哪一盤（台北 UTC+8）：日盤 08:45～13:45、夜盤 15:00～隔天 05:00（週一～五下午開始）；平日 08:45～15:00 查日盤、其他時間查夜盤；國定假日不知道
+- 期交所沒有歷史走勢：TxfTape 把這頁開著時收到的價格存 localStorage stockview:txf-points（每盤一份，sessionKey；價格或時間變才加點，最多 1500 點），圖畫這些點；不受期間切換影響；台股頁每 30 秒只更新台指期（不打斷整頁更新）
 
 ## 畫面（src/view.ts）
 - 清單分頁（全部＋各清單與股票數＋「＋ 新清單」；選了主清單以外的清單時有 ⋯ 改名／刪除）；全部裡每列標出在哪些清單；點代號的選單：同一檔在多個清單時每個清單各一項「編輯（清單）」「打開筆記（清單）」，否則編輯／打開筆記／移到其他清單／加到其他清單／從「清單」刪除
