@@ -16,6 +16,7 @@ export interface Holding {
 	cost: number | null; // 每股平均成本
 	low: number | null; // 估值下限／跌破警示
 	high: number | null; // 估值上限／突破警示
+	fair: number | null; // 合理價位（只顯示，不警示）
 	paths: string[]; // 來源筆記（同一檔在同一清單分好幾篇、或「全部」合併時會有多篇）
 }
 
@@ -25,6 +26,7 @@ export interface HoldingInput {
 	cost: number | null;
 	low: number | null;
 	high: number | null;
+	fair?: number | null;
 }
 
 export type RawHolding = HoldingInput & { path: string; list: string };
@@ -62,7 +64,7 @@ export function readHoldings(app: App, folder: string): Holding[] {
 		if (!fm || fm.ticker === undefined || fm.ticker === null || fm.ticker === "") continue;
 		const ticker = normalizeTicker(String(fm.ticker));
 		if (!isValidTicker(ticker)) continue;
-		raw.push({ ticker, shares: num(fm.shares), cost: num(fm.cost), low: num(fm.low), high: num(fm.high), path: f.path, list });
+		raw.push({ ticker, shares: num(fm.shares), cost: num(fm.cost), low: num(fm.low), high: num(fm.high), fair: num(fm.fair), path: f.path, list });
 	}
 	return mergeHoldings(raw);
 }
@@ -78,7 +80,7 @@ function merge(list: (RawHolding | Holding)[], byList: boolean): Holding[] {
 		const key = byList ? `${x.list}|${x.ticker}` : x.ticker;
 		let h = by.get(key);
 		if (!h) {
-			h = { ticker: x.ticker, list: x.list, lists: [], shares: null, cost: null, low: null, high: null, paths: [], costSum: 0, costShares: 0 };
+			h = { ticker: x.ticker, list: x.list, lists: [], shares: null, cost: null, low: null, high: null, fair: null, paths: [], costSum: 0, costShares: 0 };
 			by.set(key, h);
 		}
 		h.paths.push(...("path" in x ? [x.path] : x.paths));
@@ -92,6 +94,7 @@ function merge(list: (RawHolding | Holding)[], byList: boolean): Holding[] {
 		}
 		if (h.low === null && x.low !== null) h.low = x.low;
 		if (h.high === null && x.high !== null) h.high = x.high;
+		if (h.fair === null && (x.fair ?? null) !== null) h.fair = x.fair ?? null;
 	}
 	return [...by.values()].map(({ costSum, costShares, ...h }) => ({ ...h, cost: costShares ? costSum / costShares : null }));
 }
@@ -131,6 +134,7 @@ export function holdingNote(h: HoldingInput): string {
 		`shares: ${fmtNum(h.shares)}`,
 		`cost: ${fmtNum(h.cost)}`,
 		`low: ${fmtNum(h.low)}`,
+		`fair: ${fmtNum(h.fair ?? null)}`,
 		`high: ${fmtNum(h.high)}`,
 		"---",
 		`# ${h.ticker}`,
@@ -150,9 +154,11 @@ export function holdingNote(h: HoldingInput): string {
 /** 檢查輸入；回傳錯誤訊息或 null。 */
 export function checkInput(h: HoldingInput): string | null {
 	if (!isValidTicker(h.ticker)) return "代號只能有英文字母、數字和 . - ^ =（例如 AAPL、BRK-B）";
-	for (const [k, v] of [["股數", h.shares], ["成本", h.cost], ["下限", h.low], ["上限", h.high]] as const)
+	const fair = h.fair ?? null;
+	for (const [k, v] of [["股數", h.shares], ["成本", h.cost], ["下限", h.low], ["合理價位", fair], ["上限", h.high]] as const)
 		if (v !== null && (!isFinite(v) || v < 0)) return `${k}要是 0 以上的數字`;
 	if (h.low !== null && h.high !== null && h.low >= h.high) return "下限要比上限小";
+	if (fair !== null && ((h.low !== null && fair < h.low) || (h.high !== null && fair > h.high))) return "合理價位要在下限和上限之間";
 	return null;
 }
 
@@ -211,6 +217,7 @@ export async function updateHolding(app: App, path: string, h: Omit<HoldingInput
 		fm.shares = h.shares ?? "";
 		fm.cost = h.cost ?? "";
 		fm.low = h.low ?? "";
+		fm.fair = h.fair ?? "";
 		fm.high = h.high ?? "";
 	});
 }

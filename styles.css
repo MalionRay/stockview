@@ -344,3 +344,15 @@
 .sv-markets .sv-head .sv-btns { margin-left: auto; }
 .sv-mcard-info { font-size: 0.8em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .sv-mcard-note { font-size: 0.75em; margin-top: 4px; }
+/* 合理價位：色條上的細線＋文字 */
+.sv-fair-tick {
+	position: absolute;
+	top: -3px;
+	width: 2px;
+	height: 12px;
+	margin-left: -1px;
+	border-radius: 1px;
+	background: var(--interactive-accent);
+}
+.sv-fair::before { content: ""; display: inline-block; width: 2px; height: 0.9em; margin-right: 5px; vertical-align: -0.1em; border-radius: 1px; background: var(--interactive-accent); }
+.sv-fair { font-size: 0.85em; color: var(--text-muted); font-variant-numeric: tabular-nums; }

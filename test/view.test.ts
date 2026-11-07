@@ -177,3 +177,19 @@ test("選的清單不存在了（被刪或改名）就回到全部", async () =>
 	await plugin.feed.round();
 	assert.match(text(el.querySelector(".sv-list-tab.is-active")!), /^全部/);
 });
+
+test("估值區間顯示合理價位：色條上的細線和「現價高／低 x%」；只填合理價位也顯示", async () => {
+	ob.__setRequestHandler(async (r: { url: string }) => ({ status: 200, json: chart({ price: r.url.includes("/AAA?") ? 220 : 90, prev: 100 }) }));
+	const { el, plugin } = await mount([
+		["Portfolio/AAA.md", note({ ticker: "AAA", shares: 1, cost: 1, low: 150, fair: 200, high: 250 })],
+		["Portfolio/BBB.md", note({ ticker: "BBB", shares: 1, cost: 1, fair: 100 })],
+	]);
+	await plugin.feed.round();
+	const row = (t: string) => [...el.querySelectorAll("tbody tr")].find((tr) => text(tr).startsWith(t))!;
+	const a = row("AAA").querySelector(".sv-c-range")!;
+	assert.equal((a.querySelector(".sv-fair-tick") as HTMLElement).style.left, "50%");
+	assert.match(text(a), /合理 \$200\.00，現價高 10\.0%/);
+	const b = row("BBB").querySelector(".sv-c-range")!;
+	assert.equal(b.querySelector(".sv-bar"), null, "沒有上下限就沒有色條");
+	assert.match(text(b), /合理 \$100\.00，現價低 10\.0%/);
+});

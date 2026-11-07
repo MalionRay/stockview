@@ -78,7 +78,7 @@ test("新增筆記與修改 frontmatter（內文不動）", async () => {
 	const { app, files } = makeApp();
 	await addHolding(app, "Portfolio", MAIN_LIST, { ticker: "AMD", shares: 5, cost: 99.9, low: null, high: 200 });
 	const s = String(files.get("Portfolio/AMD.md"));
-	assert.match(s, /ticker: AMD\nshares: 5\ncost: 99.9\nlow: \nhigh: 200/);
+	assert.match(s, /ticker: AMD\nshares: 5\ncost: 99.9\nlow: \nfair: \nhigh: 200/);
 	await assert.rejects(addHolding(app, "Portfolio", MAIN_LIST, { ticker: "AMD", shares: 1, cost: 1, low: null, high: null }), /已經有/);
 	await updateHolding(app, "Portfolio/AMD.md", { shares: 8, cost: 90, low: 80, high: null });
 	const t = String(files.get("Portfolio/AMD.md"));
@@ -162,4 +162,29 @@ test("新增到清單、移到別的清單、清單改名、刪除清單", async
 	await deleteList(app, "Portfolio", "波段");
 	assert.ok(!files.has("Portfolio/波段/AAPL.md"));
 	await assert.rejects(deleteList(app, "Portfolio", MAIN_LIST), /主清單/);
+});
+
+test("合理價位：讀寫 frontmatter、合併取第一個有填的、要在上下限之間", async () => {
+	const { app, files } = makeApp();
+	await addHolding(app, "Portfolio", MAIN_LIST, { ticker: "AMD", shares: 1, cost: 1, low: 100, fair: 150, high: 200 });
+	assert.match(String(files.get("Portfolio/AMD.md")), /low: 100\nfair: 150\nhigh: 200/);
+	let [h] = readHoldings(app, "Portfolio");
+	assert.equal(h.fair, 150);
+	await updateHolding(app, "Portfolio/AMD.md", { shares: 1, cost: 1, low: 100, fair: 160, high: 200 });
+	[h] = readHoldings(app, "Portfolio");
+	assert.equal(h.fair, 160);
+	await updateHolding(app, "Portfolio/AMD.md", { shares: 1, cost: 1, low: 100, fair: null, high: 200 });
+	[h] = readHoldings(app, "Portfolio");
+	assert.equal(h.fair, null);
+	const [m] = mergeHoldings([
+		{ ticker: "X", shares: 1, cost: 1, low: null, high: null, fair: null, path: "P/a.md", list: "" },
+		{ ticker: "X", shares: 1, cost: 1, low: null, high: null, fair: 42, path: "P/b.md", list: "" },
+	]);
+	assert.equal(m.fair, 42);
+	const ok = { ticker: "AAPL", shares: 1, cost: 1, low: 100, high: 200 };
+	assert.equal(checkInput({ ...ok, fair: 150 }), null);
+	assert.equal(checkInput({ ...ok, fair: 100 }), null, "等於下限可以");
+	assert.match(checkInput({ ...ok, fair: 99 })!, /合理價位要在下限和上限之間/);
+	assert.match(checkInput({ ...ok, fair: 201 })!, /合理價位/);
+	assert.equal(checkInput({ ...ok, low: null, high: null, fair: 5 }), null, "只填合理價位也可以");
 });

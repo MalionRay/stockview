@@ -107,7 +107,7 @@ export class StockViewSettingTab extends PluginSettingTab {
 		new Setting(el).setName("持股").setHeading();
 		new Setting(el)
 			.setName("股票筆記資料夾")
-			.setDesc("每檔股票一篇筆記，frontmatter 寫 ticker、shares、cost、low、high（和之前 Dataview 儀表板的格式一樣）；每個子資料夾是一個清單")
+			.setDesc("每檔股票一篇筆記，frontmatter 寫 ticker、shares、cost、low、fair、high（和之前 Dataview 儀表板的格式一樣，fair 是合理價位）；每個子資料夾是一個清單")
 			.addText((t) =>
 				t
 					.setPlaceholder("Portfolio")

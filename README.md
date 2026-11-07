@@ -29,9 +29,12 @@ ticker: NVDA
 shares: 50
 cost: 120.5
 low: 150
+fair: 190
 high: 220
 ---
 ```
+
+`low`／`high` 是估值下限／上限（碰到會提醒），`fair` 是你認為的合理價位（只顯示：色條上的紫色細線，和現價比它高或低多少）。三個都可以不填。
 
 之前 Dataview 儀表板的 Portfolio 筆記格式相同，可以直接用（儀表板那篇 dataviewjs 筆記可以刪掉）。
 

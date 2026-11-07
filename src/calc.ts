@@ -101,6 +101,18 @@ export function totals(rows: Row[], base: Base, fx: number | null): Totals {
 	};
 }
 
+/** 現價比合理價位高或低多少（%）；正＝比合理價貴。 */
+export function vsFair(price: number | null, fair: number | null): number | null {
+	if (price === null || !fair) return null;
+	return ((price - fair) / fair) * 100;
+}
+
+/** 合理價位在區間色條上的位置（0～100%）。 */
+export function fairPos(fair: number | null, low: number | null, high: number | null): number | null {
+	if (fair === null || low === null || high === null || high <= low) return null;
+	return Math.max(0, Math.min(100, ((fair - low) / (high - low)) * 100));
+}
+
 /** 估值區間：價格在區間的哪裡（0～100%，超出就夾住），以及是否突破／跌破。 */
 export function rangeState(price: number | null, low: number | null, high: number | null): { state: "above" | "below" | "inside" | null; pos: number | null } {
 	if (price === null || (low === null && high === null)) return { state: null, pos: null };

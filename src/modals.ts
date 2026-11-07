@@ -55,6 +55,7 @@ export class HoldingModal extends Modal {
 			cost: h?.cost ?? pf.cost ?? null,
 			low: h?.low ?? pf.low ?? null,
 			high: h?.high ?? pf.high ?? null,
+			fair: h?.fair ?? pf.fair ?? null,
 		};
 		this.list = h?.list ?? opts.list ?? MAIN_LIST;
 	}
@@ -98,7 +99,7 @@ export class HoldingModal extends Modal {
 				});
 			info = el.createDiv("sv-lookup");
 		}
-		const numField = (name: string, desc: string, key: "shares" | "cost" | "low" | "high", ph: string) =>
+		const numField = (name: string, desc: string, key: "shares" | "cost" | "low" | "fair" | "high", ph: string) =>
 			new Setting(el)
 				.setName(name)
 				.setDesc(desc)
@@ -113,6 +114,7 @@ export class HoldingModal extends Modal {
 		numField("股數", "空白＝只追蹤（觀察名單，不算損益）", "shares", "50");
 		numField("每股成本", "平均買進價（美元）", "cost", "120.5");
 		numField("估值下限", "跌破會提醒；空白＝不設", "low", "150");
+		numField("合理價位", "你認為合理的價格（只顯示和比較，不提醒）；空白＝不設", "fair", "185");
 		numField("估值上限", "突破會提醒；空白＝不設", "high", "220");
 
 		const msg = el.createDiv("sv-modal-msg");

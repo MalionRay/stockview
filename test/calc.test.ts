@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeRow, effectivePrice, rangeState, toBase, totals } from "../src/calc";
+import { computeRow, effectivePrice, fairPos, rangeState, toBase, totals, vsFair } from "../src/calc";
 import type { Holding } from "../src/holdings";
 import type { Quote } from "../src/quote";
 
-const H = (o: Partial<Holding>): Holding => ({ ticker: "AAA", shares: 10, cost: 100, low: null, high: null, paths: ["P/x.md"], ...o });
+const H = (o: Partial<Holding>): Holding => ({ ticker: "AAA", list: "", lists: [""], shares: 10, cost: 100, low: null, high: null, fair: null, paths: ["P/x.md"], ...o });
 const Q = (o: Partial<Quote>): Quote => ({ price: 110, prevClose: 105, currency: "USD", name: "", session: "regular", ext: null, at: 0, ...o });
 
 test("單檔：市值、未實現損益、今日漲跌", () => {
@@ -74,4 +74,14 @@ test("估值區間位置與突破／跌破", () => {
 	assert.deepEqual(rangeState(140, 150, null), { state: "below", pos: null });
 	assert.deepEqual(rangeState(140, null, null), { state: null, pos: null });
 	assert.deepEqual(rangeState(null, 1, 2), { state: null, pos: null });
+});
+
+test("合理價位：現價比它貴或便宜多少、在色條上的位置", () => {
+	assert.equal(vsFair(110, 100), 10);
+	assert.equal(vsFair(90, 100), -10);
+	assert.equal(vsFair(null, 100), null);
+	assert.equal(vsFair(90, null), null);
+	assert.equal(fairPos(175, 150, 200), 50);
+	assert.equal(fairPos(175, null, 200), null);
+	assert.equal(fairPos(null, 150, 200), null);
 });

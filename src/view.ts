@@ -2,7 +2,7 @@
 // 每次更新只重畫內容，不換掉外框，表格的左右捲動位置會留著。
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import { alarmText } from "./alarm";
-import { Row, rangeState, toBase, totals } from "./calc";
+import { Row, rangeState, toBase, totals, fairPos, vsFair } from "./calc";
 import { VIEW_TYPE } from "./config";
 import * as F from "./format";
 import { ALL_LISTS, Holding, MAIN_LIST, listLabel } from "./holdings";
@@ -242,7 +242,7 @@ export class DashboardView extends ItemView {
 				text:
 					p.feed.holdings.length && sel !== ALL_LISTS
 						? `「${listLabel(sel)}」還沒有股票。`
-						: `還沒有股票。按「新增股票」，或在「${p.settings.folder}」資料夾放筆記（frontmatter 寫 ticker、shares、cost、low、high；子資料夾是不同的清單）。`,
+						: `還沒有股票。按「新增股票」，或在「${p.settings.folder}」資料夾放筆記（frontmatter 寫 ticker、shares、cost、low、fair、high；子資料夾是不同的清單）。`,
 			});
 			const b = this.emptyEl.createEl("button", { cls: "mod-cta", text: "新增股票" });
 			b.onclick = () => p.openHoldingModal({ list: p.defaultAddList() });
@@ -331,22 +331,36 @@ export class DashboardView extends ItemView {
 	}
 
 	private renderRange(td: HTMLElement, r: Row): void {
-		const { low, high } = r.h;
-		if (low === null && high === null) {
+		const { low, high, fair } = r.h;
+		if (low === null && high === null && fair === null) {
 			td.createSpan({ cls: "sv-muted", text: "—" });
 			return;
 		}
 		const st = rangeState(r.alarmPrice, low, high);
 		const w = this.plugin.alarms.waiting(r.h.lists, r.h.ticker);
 		const box = td.createDiv("sv-range");
-		const bar = box.createDiv("sv-bar");
-		if (st.pos !== null) {
-			const m = bar.createDiv("sv-marker");
-			m.style.left = `${st.pos}%`;
+		if (low !== null || high !== null) {
+			const bar = box.createDiv("sv-bar");
+			const fp = fairPos(fair, low, high);
+			if (fp !== null) {
+				const f = bar.createDiv("sv-fair-tick");
+				f.style.left = `${fp}%`;
+				f.title = `合理價位 ${F.price(fair, r.cur)}`;
+			}
+			if (st.pos !== null) {
+				const m = bar.createDiv("sv-marker");
+				m.style.left = `${st.pos}%`;
+			}
+			const lab = box.createDiv("sv-range-labels");
+			lab.createSpan({ text: low === null ? "—" : F.price(low, r.cur) });
+			lab.createSpan({ text: high === null ? "—" : F.price(high, r.cur) });
 		}
-		const lab = box.createDiv("sv-range-labels");
-		lab.createSpan({ text: low === null ? "—" : F.price(low, r.cur) });
-		lab.createSpan({ text: high === null ? "—" : F.price(high, r.cur) });
+		// 合理價位：現價比它貴或便宜多少
+		if (fair !== null) {
+			const d = vsFair(r.alarmPrice, fair);
+			const rel = d === null ? "" : Math.abs(d) < 0.5 ? "，接近合理價" : d > 0 ? `，現價高 ${d.toFixed(1)}%` : `，現價低 ${Math.abs(d).toFixed(1)}%`;
+			box.createDiv({ cls: "sv-fair", text: `合理 ${F.price(fair, r.cur)}${rel}` });
+		}
 		const badge =
 			st.state === "above" ? ["突破上限", "sv-b-above"] : st.state === "below" ? ["跌破下限", "sv-b-below"] : st.state === "inside" ? [st.pos !== null ? `區間內 ${Math.round(st.pos)}%` : "區間內", "sv-b-inside"] : null;
 		if (badge) {
@@ -382,7 +396,7 @@ export class DashboardView extends ItemView {
 				i
 					.setTitle("加到其他清單…")
 					.setIcon("copy-plus")
-					.onClick(() => p.openHoldingModal({ list: others[0], prefill: { ticker: r.h.ticker, low: r.h.low, high: r.h.high } })),
+					.onClick(() => p.openHoldingModal({ list: others[0], prefill: { ticker: r.h.ticker, low: r.h.low, high: r.h.high, fair: r.h.fair } })),
 			);
 		if (perList.length <= 1) {
 			const h = perList[0] ?? r.h;
