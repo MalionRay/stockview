@@ -24,6 +24,7 @@ P.createSpan = function (o, cb) { return this.createEl("span", o, cb); };
 P.empty = function () { this.innerHTML = ""; };
 P.addClass = function (c) { this.classList.add(c); };
 P.removeClass = function (c) { this.classList.remove(c); };
+P.toggleClass = function (c, on) { this.classList.toggle(c, on); };
 P.hasClass = function (c) { return this.classList.contains(c); };
 P.setText = function (t) { this.textContent = t; };
 P.scrollIntoView = function () {};

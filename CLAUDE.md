@@ -38,6 +38,16 @@
 - Remotely Save 正在同步（內部 isSyncing）時先等它結束（最多 60 秒）再觸發；離線、沒裝 Remotely Save、設定 autoSync 關閉時不做事
 - 不在筆記被改（metadataCache changed）時觸發：同步下載的檔案也會觸發，會多同步一次
 
+## 市場行情（src/markets.ts、src/chart.ts、src/marketview.ts，v0.3.0）
+- 另一個畫面（MARKET_VIEW "stockview-markets"；左側地球圖示、指令「打開市場行情」、儀表板「市場」按鈕；畫面上「持股」回儀表板）
+- 分頁：美股（^GSPC、^DJI、^IXIC、^SOX）、台股（^TWII、^TWOII）、日股（^N225、TOPIX 用 ETF 1306.T 代替）、陸股（000001.SS、399001.SZ、000300.SS）、韓股（^KS11、^KQ11）、歐股（^STOXX50E、^GDAXI、^FTSE、^FCHI）、匯率（美元、100 日圓、人民幣、1000 韓元、歐元對台幣）；使用者 2026-11-07 選的：只要指數走勢圖和匯率（不要個股圖、不要這些市場的持股）
+- 期間 RANGES：1日（5m）、5日（15m）、1月（60m）、6月、今年、1年（1d）、5年（1wk）；整頁共用；分頁與期間存 localStorage stockview:market-tab／stockview:market-range
+- 資料：Yahoo chart API（range＋interval），parseSeries；基準＝chartPreviousClose（1日＝昨收，其他＝區間開始前），沒有就用第一點；1日 x 軸用交易時段（domain），其他依點的順序（跳過休市）
+- 交叉匯率代號（JPYTWD=X 等）拿不到時用美元匯率換算（fallback mul／div，combineSeries 取當時或之前最近的值）；429 不換算；顯示倍數 scale（日圓 100、韓元 1000）
+- 快取 MarketData：1日 1 分鐘、5日 5 分鐘、1月 15 分鐘、其他 30～60 分鐘；1日每分鐘自動更新；重新整理清快取；換期間時舊圖變淡保留不閃爍，換市場才清掉
+- 走勢圖 drawChart：2px 線（non-scaling-stroke）、10% 面積、基準線（1px 實線）、最後一點圓點、右側最高／最低、下方起訖時間（交易所當地時間，gmtoffset）；十字線＋提示框（時間、數值、比基準 %），pointer 事件，觸控 touch-action: pan-y；顏色跟漲跌（colorStyle）
+- 代號是依常識選的，開發環境連不到 Yahoo 沒實測；拿不到的卡片顯示原因，其他照常
+
 ## 畫面（src/view.ts）
 - 清單分頁（全部＋各清單與股票數＋「＋ 新清單」；選了主清單以外的清單時有 ⋯ 改名／刪除）；全部裡每列標出在哪些清單；點代號的選單：同一檔在多個清單時每個清單各一項「編輯（清單）」「打開筆記（清單）」，否則編輯／打開筆記／移到其他清單／加到其他清單／從「清單」刪除
 - 狀態列（盤前／盤中／盤後／收盤、更新時間、間隔）、提示（429、匯率暫用、Finnhub 金鑰）、四張卡片（總市值、總損益、今日損益、總成本）、表格、警示紀錄（details）

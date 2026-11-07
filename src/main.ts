@@ -11,6 +11,7 @@ import { FinnhubKeyModal, StockViewSettingTab } from "./settings";
 import { beep } from "./sound";
 import { SyncTrigger } from "./sync";
 import { DashboardView } from "./view";
+import { MARKET_VIEW, MarketsView } from "./marketview";
 
 export default class StockViewPlugin extends Plugin {
 	settings: StockViewSettings = { ...DEFAULT_SETTINGS };
@@ -35,8 +36,11 @@ export default class StockViewPlugin extends Plugin {
 		});
 
 		this.registerView(VIEW_TYPE, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this));
+		this.registerView(MARKET_VIEW, (leaf: WorkspaceLeaf) => new MarketsView(leaf, this));
 		this.addRibbonIcon("line-chart", "StockView", () => void this.openDashboard());
+		this.addRibbonIcon("globe", "StockView 市場行情", () => void this.openMarkets());
 		this.addCommand({ id: "open", name: "打開儀表板", callback: () => void this.openDashboard() });
+		this.addCommand({ id: "markets", name: "打開市場行情", callback: () => void this.openMarkets() });
 		this.addCommand({ id: "add", name: "新增股票", callback: () => this.openHoldingModal({ list: this.defaultAddList() }) });
 		this.addCommand({ id: "add-list", name: "新增清單", callback: () => this.openListModal() });
 		this.addCommand({ id: "refresh", name: "重新整理報價", callback: () => this.feed.kick() });
@@ -82,14 +86,23 @@ export default class StockViewPlugin extends Plugin {
 	}
 
 	async openDashboard(): Promise<void> {
+		await this.openView(VIEW_TYPE);
+	}
+
+	async openMarkets(): Promise<void> {
+		await this.openView(MARKET_VIEW);
+	}
+
+	/** 已經開著就切過去，沒有就開新分頁。 */
+	private async openView(type: string): Promise<void> {
 		const ws = this.app.workspace;
-		const existing = ws.getLeavesOfType(VIEW_TYPE)[0];
+		const existing = ws.getLeavesOfType(type)[0];
 		if (existing) {
 			await ws.revealLeaf(existing);
 			return;
 		}
 		const leaf = ws.getLeaf("tab");
-		await leaf.setViewState({ type: VIEW_TYPE, active: true });
+		await leaf.setViewState({ type, active: true });
 		await ws.revealLeaf(leaf);
 	}
 
