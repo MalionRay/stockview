@@ -356,3 +356,8 @@
 }
 .sv-fair::before { content: ""; display: inline-block; width: 2px; height: 0.9em; margin-right: 5px; vertical-align: -0.1em; border-radius: 1px; background: var(--interactive-accent); }
 .sv-fair { font-size: 0.85em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* iPhone：底部留出 Obsidian 浮動導覽列的高度（src/navbar.ts 量出 --sv-navbar-gap；其他裝置是 0） */
+.workspace-leaf-content[data-type^="stockview-"] > .view-content {
+	padding-bottom: calc(var(--sv-navbar-gap, 0px) + 16px);
+}

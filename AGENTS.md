@@ -62,6 +62,9 @@
 - 每次更新只重畫內容不換外框（表格左右捲動位置留著）；第一欄 sticky；窄螢幕按鈕只留圖示、卡片兩欄
 - 設定頁不放 SecretComponent：一列摘要＋「設定…」開 FinnhubKeyModal（金鑰欄不用 type=password；只留英數字）；也有指令「設定 Finnhub 金鑰」
 
+## 手機版面
+- iPhone 浮動導覽列（v0.5.1，和 Language Learning 0.21.2 同一個做法）：src/navbar.ts 只在 Platform.isPhone 量 .mobile-navbar 高度＋CSS bottom＋8px，存成 body 的 --sv-navbar-gap；styles.css 讓 stockview-* 畫面的 .view-content 底部留這麼多
+
 ## 專案慣例
 - 原始碼在 src/；`npm run build` 先跑 tsc 再用 esbuild 輸出 main.js
 - `npm run check` 掃描是否違反上面的硬性限制；每次改完都要跑

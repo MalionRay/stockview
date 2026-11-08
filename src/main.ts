@@ -9,6 +9,7 @@ import { DeleteHoldingModal, DeleteListModal, HoldingModal, HoldingModalOpts, Li
 import { Ratings } from "./ratings";
 import { FinnhubKeyModal, StockViewSettingTab } from "./settings";
 import { beep } from "./sound";
+import { watchNavbar } from "./navbar";
 import { SyncTrigger } from "./sync";
 import { DashboardView } from "./view";
 import { MARKET_VIEW, MarketsView } from "./marketview";
@@ -61,7 +62,10 @@ export default class StockViewPlugin extends Plugin {
 		this.registerEvent(this.app.vault.on("delete", (f) => onFile(f.path)));
 		this.registerEvent(this.app.vault.on("rename", (f, old) => (onFile(f.path), onFile(old))));
 
-		this.app.workspace.onLayoutReady(() => this.feed.start());
+		this.app.workspace.onLayoutReady(() => {
+			this.feed.start();
+			watchNavbar(this); // iPhone 下方浮動導覽列會蓋住畫面底部
+		});
 	}
 
 	onunload(): void {
