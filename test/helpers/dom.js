@@ -1,6 +1,7 @@
 // 在 Node 裡用 jsdom 模擬瀏覽器，並補上 Obsidian 對 HTMLElement 的擴充方法
 const { JSDOM } = require("jsdom");
-const dom = new JSDOM("<!doctype html><body></body>");
+// pretendToBeVisual：document.hidden＝false（外掛只在畫面看得到時自動更新）
+const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
 global.window = dom.window;
 global.document = dom.window.document;
 global.HTMLElement = dom.window.HTMLElement;

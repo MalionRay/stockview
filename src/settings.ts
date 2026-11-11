@@ -71,10 +71,14 @@ export class FinnhubKeyModal extends Modal {
 					.setButtonText("清除金鑰")
 					.setWarning()
 					.onClick(() => {
-						ss.setSecret(SECRET_FINNHUB, "");
-						p.ratings.clear();
-						keySetting.setDesc("已清除。");
-						result.setText("");
+						try {
+							ss.setSecret(SECRET_FINNHUB, "");
+							p.ratings.clear();
+							keySetting.setDesc("已清除。");
+							result.setText("");
+						} catch (e) {
+							keySetting.setDesc(`清除失敗：${(e as Error)?.message ?? e}`);
+						}
 					}),
 			);
 	}

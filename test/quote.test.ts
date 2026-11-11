@@ -62,3 +62,23 @@ test("代號正規化與檢查", () => {
 	assert.ok(!isUsTicker("2330.TW"));
 	assert.ok(!isUsTicker("TWD=X"));
 });
+
+test("交易時段已經換成下一個交易日（半夜、週末）時，還是認得出上一個交易日的盤後價", () => {
+	// K 線是「昨天」的（盤中到 3000、盤後 3100），交易時段是「今天」的（從 100000 開始）
+	const next = { pre: { start: 100000, end: 101000 }, regular: { start: 101000, end: 102000 }, post: { start: 102000, end: 103000 } };
+	const d = chart({ price: 100, bars: [[2900, 100], [3100, 98.5]], period: next });
+	(d.chart.result[0].meta as Record<string, unknown>).regularMarketTime = 3000;
+	const q = parseChart(d, 50000);
+	assert.equal(q.session, "closed");
+	assert.deepEqual(q.ext, { kind: "post", price: 98.5 });
+	// 盤中最後一筆之後沒有更晚的 K → 沒有延長時段價
+	const none = chart({ price: 100, bars: [[2900, 100]], period: next });
+	(none.chart.result[0].meta as Record<string, unknown>).regularMarketTime = 3000;
+	assert.equal(parseChart(none, 50000).ext, null);
+	// 隔了很久（隔天清晨）的 K＝盤前
+	const pre = chart({ price: 100, bars: [[2900, 100], [3000 + 12 * 3600, 101]], period: next });
+	(pre.chart.result[0].meta as Record<string, unknown>).regularMarketTime = 3000;
+	assert.deepEqual(parseChart(pre, 50000).ext, { kind: "pre", price: 101 });
+	// 沒有 regularMarketTime 就照舊（不猜）
+	assert.equal(parseChart(chart({ price: 100, bars: [[2900, 100], [3100, 98.5]], period: next }), 50000).ext, null);
+});

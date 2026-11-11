@@ -77,6 +77,7 @@ export class Ratings {
 	private cache: Cache;
 	private running = false;
 	authFailedAt = 0;
+	retryAt = 0; // 次數用完或連不上：這個時間之前先不再試（不然每一輪報價更新都會再打一次）
 	lastError = "";
 
 	constructor(
@@ -109,14 +110,16 @@ export class Ratings {
 	clear(): void {
 		this.cache = {};
 		this.authFailedAt = 0;
+		this.retryAt = 0;
+		this.lastError = "";
 		this.app.saveLocalStorage(LS_RATINGS, this.cache);
 	}
 
-	/** 背景補齊過期的評級；金鑰錯誤後 1 小時內不再試。 */
-	async refresh(tickers: string[], sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms))): Promise<void> {
+	/** 背景補齊過期的評級；金鑰錯誤後 1 小時內不再試，次數用完或連不上先停 1 分鐘。 */
+	async refresh(tickers: string[], sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms)), now: () => number = Date.now): Promise<void> {
 		const key = this.key();
-		if (!key || this.running || Date.now() - this.authFailedAt < 3600_000) return;
-		const todo = tickers.filter((t) => this.stale(t));
+		if (!key || this.running || (this.authFailedAt && now() - this.authFailedAt < 3600_000) || now() < this.retryAt) return;
+		const todo = tickers.filter((t) => this.stale(t, now()));
 		if (!todo.length) return;
 		this.running = true;
 		try {
@@ -125,12 +128,13 @@ export class Ratings {
 				const t = todo[i];
 				try {
 					const r = await fetchRating(t, key);
-					this.cache[t] = r ?? { none: true, at: Date.now() };
+					this.cache[t] = r ? { ...r, at: now() } : { none: true, at: now() };
 					this.lastError = "";
 				} catch (e) {
 					const err = e as RatingError;
-					this.lastError = err.message;
-					if (err.kind === "auth") this.authFailedAt = Date.now();
+					this.lastError = err.message ?? String(e);
+					if (err.kind === "auth") this.authFailedAt = now();
+					else this.retryAt = now() + 60_000;
 					break;
 				}
 				this.app.saveLocalStorage(LS_RATINGS, this.cache);

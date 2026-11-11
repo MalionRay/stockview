@@ -115,3 +115,25 @@ test("時間文字用交易所當地時間", () => {
 	assert.equal(fmtLevel(32.12345, true), "32.123");
 	assert.equal(fmtLevel(null), "—");
 });
+
+test("Yahoo 沒有的交叉匯率代號：記住 6 小時，之後直接換算、不再白問；重新整理（clear）後重問", async () => {
+	const calls: string[] = [];
+	const mk = (v: number) => parseSeries(chart({ bars: [[0, v]], prev: v }), R1D);
+	const d = new MarketData(async (s) => {
+		calls.push(s);
+		if (s === "JPYTWD=X") throw Object.assign(new Error("Yahoo 沒有這個代號"), { status: 404 });
+		return s === "TWD=X" ? mk(32) : mk(160);
+	});
+	const jp = MARKETS.find((m) => m.id === "fx")!.items.find((i) => i.symbol === "JPYTWD=X")!;
+	assert.equal((await d.get(jp, R1D, 1000)).last, 20);
+	assert.equal((await d.get(jp, R1D, 1000 + 61_000)).last, 20);
+	assert.equal(calls.filter((s) => s === "JPYTWD=X").length, 1, "快取過期後也不再問查不到的代號");
+	assert.ok(calls.filter((s) => s === "TWD=X").length >= 2, "換算用的匯率照常更新");
+	await d.get(jp, R1D, 1000 + 7 * 3600_000);
+	assert.equal(calls.filter((s) => s === "JPYTWD=X").length, 2, "6 小時後再確認一次");
+	await d.get(jp, R1D, 1000 + 7 * 3600_000 + 61_000);
+	assert.equal(calls.filter((s) => s === "JPYTWD=X").length, 2, "又記住 6 小時");
+	d.clear();
+	await d.get(jp, R1D, 1000 + 7 * 3600_000 + 62_000);
+	assert.equal(calls.filter((s) => s === "JPYTWD=X").length, 3);
+});

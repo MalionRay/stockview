@@ -188,3 +188,10 @@ test("合理價位：讀寫 frontmatter、合併取第一個有填的、要在�
 	assert.match(checkInput({ ...ok, fair: 201 })!, /合理價位/);
 	assert.equal(checkInput({ ...ok, low: null, high: null, fair: 5 }), null, "只填合理價位也可以");
 });
+
+test("清單名稱：不能用 . 結尾，也不能用 Windows 的保留字", () => {
+	assert.match(checkListName("觀察.", [])!, /開頭或結尾/);
+	assert.match(checkListName("CON", [])!, /不能當資料夾名稱/);
+	assert.match(checkListName("com1", [])!, /不能當資料夾名稱/);
+	assert.equal(checkListName("console", []), null);
+});

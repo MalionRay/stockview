@@ -5,7 +5,7 @@ import { drawChart } from "./chart";
 import * as F from "./format";
 import type StockViewPlugin from "./main";
 import { MARKETS, Market, MarketData, MarketItem, Point, RANGES, RangeDef, Series, fmtLevel, rangeOf, timeLabel } from "./markets";
-import { SESSION_TEXT, TxfQuote, TxfTape, fetchTaifex, txfMarket, txfSession } from "./taifex";
+import { HALTED_TEXT, SESSION_TEXT, TxfQuote, TxfTape, fetchTaifex, txfHalted, txfMarket, txfSession } from "./taifex";
 
 export const MARKET_VIEW = "stockview-markets";
 export const LS_MARKET_TAB = "stockview:market-tab";
@@ -79,12 +79,30 @@ export class MarketsView extends ItemView {
 		this.tape = new TxfTape(this.app);
 		this.renderBars();
 		await this.load();
-		this.timer = window.setInterval(() => {
-			this.ticks++;
-			if (this.range().id === "1d" && this.ticks % 2 === 0) void this.load();
-			else if (this.market().items.some((i) => i.kind === "taifex")) void this.load(false, true);
-		}, TICK_MS);
+		this.timer = window.setInterval(() => this.tick(), TICK_MS);
 		this.registerInterval(this.timer);
+		// 切回這個分頁、Obsidian 回到前景：補更新一次（看不到的時候不抓）
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", (leaf) => {
+				if (leaf === this.leaf) void this.load();
+			}),
+		);
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (this.shown()) void this.load();
+		});
+	}
+
+	/** 這一頁現在看得到（是目前的分頁，而且 Obsidian 在前景）。 */
+	private shown(): boolean {
+		return !document.hidden && this.contentEl.isShown();
+	}
+
+	/** 每 30 秒：1日走勢每分鐘整頁更新；台指期交易中每 30 秒、收盤中每 5 分鐘。看不到這一頁時不抓。 */
+	tick(): void {
+		this.ticks++;
+		if (!this.shown()) return;
+		if (this.range().id === "1d" && this.ticks % 2 === 0) void this.load();
+		else if (this.market().items.some((i) => i.kind === "taifex") && (txfSession(this.now()) !== "closed" || this.ticks % 10 === 0)) void this.load(false, true);
 	}
 
 	async onClose(): Promise<void> {
@@ -149,7 +167,8 @@ export class MarketsView extends ItemView {
 					if (item.kind === "taifex") {
 						const q = await this.taifex(txfMarket(this.now()));
 						if (seq !== this.seq) return;
-						const pts = this.tape ? this.tape.add(q, this.now()) : [];
+						// 休市（國定假日）時不記錄，圖留著上一盤的
+						const pts = this.tape ? (txfHalted(q, this.now()) ? this.tape.points : this.tape.add(q, this.now())) : [];
 						this.fillTaifexCard(card, item, q, pts);
 						return;
 					}
@@ -177,11 +196,12 @@ export class MarketsView extends ItemView {
 		const pct = chg !== null && q.ref ? (chg / q.ref) * 100 : null;
 		const dir = F.dir(chg);
 		const ses = txfSession(this.now());
+		const halted = txfHalted(q, this.now()); // 國定假日：時鐘說在交易，其實沒開盤
 		const top = card.createDiv("sv-mcard-top");
 		const name = top.createDiv("sv-mcard-name");
 		name.createSpan({ text: item.name });
 		name.createSpan({ cls: "sv-muted sv-mcard-sym", text: q.name });
-		top.createSpan({ cls: `sv-session sv-s-${ses === "closed" ? "closed" : "regular"}`, text: SESSION_TEXT[ses] });
+		top.createSpan({ cls: `sv-session sv-s-${ses === "closed" || halted ? "closed" : "regular"}`, text: halted ? HALTED_TEXT : SESSION_TEXT[ses] });
 		const val = card.createDiv("sv-mcard-val");
 		val.createSpan({ cls: "sv-mcard-last", text: fmtLevel(q.last ?? q.ref) });
 		const c = card.createDiv(`sv-mcard-chg sv-${dir}`);

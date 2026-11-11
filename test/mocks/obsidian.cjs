@@ -33,6 +33,9 @@ class ItemView {
 		document.body.appendChild(this.contentEl);
 	}
 	registerEvent() {}
+	registerDomEvent() {}
+	registerInterval(id) { return id; }
+	register() {}
 }
 class Modal {
 	constructor(app) {

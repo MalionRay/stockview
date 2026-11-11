@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { DEFAULT_SETTINGS } from "../src/config";
 import { MarketData, RangeDef, Series } from "../src/markets";
 import { LS_MARKET_RANGE, LS_MARKET_TAB, MarketsView } from "../src/marketview";
+import { LS_TXF_POINTS } from "../src/taifex";
 import { makeApp } from "./helpers/app";
 
 function series(symbol: string, last: number, base: number): Series {
@@ -106,5 +107,49 @@ test("台股頁的台指期：夜盤報價、比參考價、最高最低、記�
 	await (view as any).load(false, true);
 	assert.match(text(card()), /拿不到資料：期交所 HTTP 520/);
 	assert.match(text(el), /加權指數/, "其他卡片照常");
+	await view.onClose();
+});
+
+test("自動更新：看不到這一頁時不抓；台指期交易中每 30 秒、收盤中每 5 分鐘；國定假日標休市", async () => {
+	let now = Date.UTC(2026, 10, 6, 14) / 1000; // 台北週五 22:00（夜盤）
+	let txf = 0;
+	let time = "22:00:00";
+	const { view, el, ls, calls } = await mount(
+		async (s) => series(s, 110, 100),
+		async (m) => (txf++, { name: "臺指期11", last: 23456, ref: 23400, high: null, low: null, time, market: m }),
+		() => now,
+	);
+	ls.set(LS_MARKET_TAB, "tw");
+	ls.set(LS_MARKET_RANGE, "1y");
+	await view.load();
+	const tapeKeyOf = (l: Map<string, unknown>) => (l.get(LS_TXF_POINTS) as { key?: string } | undefined)?.key;
+	const fri = tapeKeyOf(ls);
+	assert.ok(fri, "交易中有記錄走勢");
+	const flush = () => new Promise((r) => setTimeout(r, 0));
+	const base = { txf, yahoo: calls.length };
+	(view as any).tick(); // 第 1 次：只更新台指期
+	await flush();
+	assert.equal(txf, base.txf + 1);
+	assert.equal(calls.length, base.yahoo, "1年走勢不用每分鐘重抓");
+	// 看不到（切到別的分頁）
+	view.contentEl.style.display = "none";
+	(view as any).tick();
+	(view as any).tick();
+	await flush();
+	assert.equal(txf, base.txf + 1, "看不到時不抓");
+	view.contentEl.style.display = "";
+	// 收盤中（週六中午）：每 10 次（5 分鐘）才抓一次
+	now = Date.UTC(2026, 10, 7, 4) / 1000;
+	const before = txf;
+	for (let i = 0; i < 10; i++) (view as any).tick();
+	await flush();
+	assert.equal(txf, before + 1);
+	// 平日日盤時間、最後成交卻是清晨 → 休市
+	now = Date.UTC(2026, 10, 9, 2) / 1000; // 台北週一 10:00
+	time = "04:59:58";
+	await view.load();
+	const card = [...el.querySelectorAll(".sv-mcard")].find((c) => (c as HTMLElement).dataset.symbol === "TXF")!;
+	assert.match(text(card.querySelector(".sv-session")!), /休市/);
+	assert.equal(tapeKeyOf(ls), fri, "休市時不記錄，上一盤（週五夜盤）的圖留著");
 	await view.onClose();
 });

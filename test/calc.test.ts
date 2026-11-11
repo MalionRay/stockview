@@ -85,3 +85,16 @@ test("合理價位：現價比它貴或便宜多少、在色條上的位置", ()
 	assert.equal(fairPos(175, null, 200), null);
 	assert.equal(fairPos(null, 150, 200), null);
 });
+
+test("總成本包含還沒有報價的持股；損益只算有報價的", () => {
+	const rows = [
+		computeRow(H({ ticker: "A" }), Q({})), // 市值 1100、成本 1000
+		computeRow(H({ ticker: "B", shares: 5, cost: 40 }), null), // 沒報價，成本 200
+	];
+	const t = totals(rows, "USD", null);
+	assert.equal(t.cost, 1200, "總成本不因為少一檔報價而變少");
+	assert.equal(t.value, 1100);
+	assert.equal(t.pl, 100, "損益只算有報價的那一檔");
+	assert.equal(t.plPct, 10);
+	assert.equal(t.missing, 1);
+});

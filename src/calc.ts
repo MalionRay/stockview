@@ -68,31 +68,36 @@ export interface Totals {
 
 export function totals(rows: Row[], base: Base, fx: number | null): Totals {
 	let value = 0;
-	let cost = 0;
+	let cost = 0; // 總成本：所有有填成本的持股（不管有沒有報價）
+	let costPriced = 0; // 算損益用：有成本、也有報價的持股
+	let valuePriced = 0;
 	let day = 0;
 	let missing = 0;
 	let needsFx = false;
 	for (const r of rows) {
 		if (r.h.shares === null) continue; // 只追蹤
 		if (r.cur !== base) needsFx = true;
+		if (r.costTotal !== null) cost += toBase(r.costTotal, r.cur, base, fx);
 		if (r.value === null) {
 			missing++;
 			continue;
 		}
-		value += toBase(r.value, r.cur, base, fx);
-		if (r.costTotal !== null) cost += toBase(r.costTotal, r.cur, base, fx);
+		const v = toBase(r.value, r.cur, base, fx);
+		value += v;
+		// 沒填成本、或還沒有報價的持股不算進損益：損益＝（有成本又有報價的）市值 − 成本
+		if (r.costTotal !== null) {
+			costPriced += toBase(r.costTotal, r.cur, base, fx);
+			valuePriced += v;
+		}
 		if (r.dayPl !== null) day += toBase(r.dayPl, r.cur, base, fx);
 	}
-	// 沒填成本的持股不算進損益：損益＝有成本的市值 − 成本
-	let valueWithCost = 0;
-	for (const r of rows) if (r.value !== null && r.costTotal !== null) valueWithCost += toBase(r.value, r.cur, base, fx);
-	const pl = valueWithCost - cost;
+	const pl = valuePriced - costPriced;
 	const prev = value - day;
 	return {
 		value,
 		cost,
 		pl,
-		plPct: cost ? (pl / cost) * 100 : null,
+		plPct: costPriced ? (pl / costPriced) * 100 : null,
 		day,
 		dayPct: prev ? (day / prev) * 100 : null,
 		needsFx,

@@ -66,3 +66,24 @@ test("沒有金鑰不呼叫；有金鑰依序抓、快取；金鑰錯誤就停",
 	await rs.refresh(["MSFT"], nosleep);
 	assert.equal(calls.length, 1, "1 小時內不再試");
 });
+
+test("次數用完（429）或連不上：先停 1 分鐘，不會每一輪報價更新都再打一次", async () => {
+	const { app, secrets } = makeApp();
+	secrets.set(SECRET_FINNHUB, "k");
+	let calls = 0;
+	let limited = true;
+	ob.__setRequestHandler(async () => (calls++, limited ? { status: 429, json: {} } : { status: 200, json: [rec("2026-11-01", 1, 0, 0, 0, 0)] }));
+	const rs = new Ratings(app, () => undefined);
+	const nosleep = async () => undefined;
+	let now = 1_000_000;
+	await rs.refresh(["AAPL"], nosleep, () => now);
+	assert.equal(calls, 1);
+	assert.match(rs.lastError, /次數用完/);
+	await rs.refresh(["AAPL"], nosleep, () => now + 5000);
+	assert.equal(calls, 1, "1 分鐘內不再試");
+	limited = false;
+	await rs.refresh(["AAPL"], nosleep, () => now + 61_000);
+	assert.equal(calls, 2);
+	assert.equal(rs.lastError, "");
+	assert.equal(rs.get("AAPL")?.strongBuy, 1);
+});

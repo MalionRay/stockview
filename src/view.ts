@@ -42,6 +42,8 @@ export class DashboardView extends ItemView {
 	private emptyEl!: HTMLElement;
 	private logEl!: HTMLDetailsElement;
 	private logOpen = false;
+	private pressedAt = 0; // 手指／滑鼠按下去的時間：按著的時候先不重畫（不然剛好重畫，那一下點擊會落空）
+	private dirty = false;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -65,6 +67,16 @@ export class DashboardView extends ItemView {
 		root.empty();
 		root.addClass("sv-root");
 		root.addEventListener("click", () => unlockAudio());
+		root.addEventListener("pointerdown", () => (this.pressedAt = Date.now()));
+		const release = () => {
+			if (!this.pressedAt) return;
+			this.pressedAt = 0;
+			// 等這一下的 click 事件先跑完再補畫
+			if (this.dirty) window.setTimeout(() => this.render(), 80);
+		};
+		root.addEventListener("pointerup", release);
+		root.addEventListener("pointercancel", release);
+		root.addEventListener("pointerleave", release);
 
 		const head = root.createDiv("sv-head");
 		head.createEl("h2", { text: "StockView" });
@@ -81,7 +93,7 @@ export class DashboardView extends ItemView {
 		btn("plus", "新增股票", () => this.plugin.openHoldingModal({ list: this.plugin.defaultAddList() }), true);
 		btn("globe", "市場", () => void this.plugin.openMarkets());
 		btn("refresh-cw", "重新整理", () => {
-			this.plugin.feed.kick();
+			this.plugin.feed.refreshNow();
 			void this.plugin.sync.now(15_000); // 順便拉別台裝置新增的股票
 		});
 		btn("settings", "設定", () => this.plugin.openSettings());
@@ -109,6 +121,12 @@ export class DashboardView extends ItemView {
 
 	render(): void {
 		if (!this.tableEl) return;
+		// 正按著（3 秒內）：等放開再畫。超過 3 秒就照常畫，避免沒收到「放開」時畫面卡住不更新
+		if (this.pressedAt && Date.now() - this.pressedAt < 3000) {
+			this.dirty = true;
+			return;
+		}
+		this.dirty = false;
 		const p = this.plugin;
 		const s = p.settings;
 		const feed = p.feed;

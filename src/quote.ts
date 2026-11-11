@@ -23,6 +23,7 @@ export class QuoteError extends Error {
 	constructor(
 		message: string,
 		public status?: number,
+		public network = false, // 連不上（離線、逾時）；和「代號查不到」「回應格式不對」分開
 	) {
 		super(message);
 	}
@@ -72,11 +73,17 @@ export function parseChart(json: unknown, nowSec: number = Date.now() / 1000, at
 			break;
 		}
 	}
+	const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
 	let ext: ExtPrice | null = null;
 	if (last !== null && valid(tp.post) && lastT >= tp.post.start) ext = { kind: "post", price: last };
 	else if (last !== null && valid(tp.pre) && lastT >= tp.pre.start && lastT < tp.pre.end) ext = { kind: "pre", price: last };
+	else {
+		// 備援：交易時段已經換成下一個交易日（半夜、週末），但 K 線還是上一個交易日的 →
+		// 最後一根 K 比「最後一筆盤中成交」晚，就是延長時段的價格（隔 6 小時以上＝隔天盤前，否則＝盤後）
+		const rmt = num(m.regularMarketTime);
+		if (last !== null && session !== "regular" && rmt !== null && lastT > rmt + 90) ext = { kind: lastT - rmt > 6 * 3600 ? "pre" : "post", price: last };
+	}
 
-	const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
 	return {
 		price: num(m.regularMarketPrice),
 		prevClose: num(m.chartPreviousClose) ?? num(m.previousClose),
@@ -93,7 +100,7 @@ export async function fetchQuote(ticker: string): Promise<Quote> {
 	try {
 		res = await requestUrl({ url: chartUrl(ticker), method: "GET", throw: false });
 	} catch (e) {
-		throw new QuoteError(`連不到 Yahoo（${String((e as Error)?.message ?? e).slice(0, 80)}）`);
+		throw new QuoteError(`連不到 Yahoo（${String((e as Error)?.message ?? e).slice(0, 80)}）`, undefined, true);
 	}
 	if (res.status === 404) throw new QuoteError("找不到這個代號", 404);
 	if (res.status === 429) throw new QuoteError("Yahoo 請求太頻繁，稍後再試", 429);

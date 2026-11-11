@@ -53,11 +53,41 @@ export function txfMarket(nowSec = Date.now() / 1000): "0" | "1" {
 	return wd >= 1 && wd <= 5 && min >= 8 * 60 + 45 && min < 15 * 60 ? "0" : "1";
 }
 
-/** 這一盤的識別（日盤＝當天日期；夜盤＝開盤那天的日期），換盤時圖重新開始。 */
+/** 這一盤的識別（日盤＝當天日期；夜盤＝開盤那天的日期）。nowSec 要是那一盤交易中的時間。 */
 export function sessionKey(market: "0" | "1", nowSec = Date.now() / 1000): string {
 	const shift = market === "1" ? 5 * 3600 : 0; // 凌晨 0～5 點還算前一天的夜盤
 	const d = new Date((nowSec + TPE - shift) * 1000);
 	return `${market}:${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
+}
+
+/**
+ * 走勢圖屬於哪一盤：交易中＝這一盤；收盤中＝剛結束的那一盤（凌晨 5 點後、週末還看得到上一盤的圖）。
+ * 換盤（下一盤開始交易）時才換，圖重新開始。
+ */
+export function tapeKey(nowSec = Date.now() / 1000): string {
+	let t = nowSec;
+	// 收盤中：往回找到上一個有交易的時間（每次退 15 分鐘，最多 10 天）
+	for (let i = 0; i < 960 && txfSession(t) === "closed"; i++) t -= 900;
+	return sessionKey(txfSession(t) === "day" ? "0" : "1", t);
+}
+
+/** 最後成交時間（HH:MM:SS，台北時間）是幾分鐘前；跨午夜也算，裝置時鐘慢一點不會變成負的一整天。看不懂回傳 null。 */
+export function tradeAgeMin(time: string, nowSec = Date.now() / 1000): number | null {
+	const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(time);
+	if (!m) return null;
+	const sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+	const d = new Date((nowSec + TPE) * 1000);
+	let diff = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds() - sec;
+	if (diff < -3600) diff += 86400;
+	return diff / 60;
+}
+
+/** 時鐘說在交易、但最後一筆成交已經是很久以前（國定假日、颱風假）→ 其實沒開盤。 */
+export const HALT_MIN = 20;
+export function txfHalted(q: TxfQuote, nowSec = Date.now() / 1000): boolean {
+	if (txfSession(nowSec) === "closed") return false;
+	const age = tradeAgeMin(q.time, nowSec);
+	return age !== null && age > HALT_MIN;
 }
 
 const n = (v: unknown): number | null => {
@@ -66,12 +96,16 @@ const n = (v: unknown): number | null => {
 	return isFinite(x) && x !== 0 ? x : null;
 };
 
-/** 從回應挑出近月台指期（跳過跨月價差，名稱有「/」的）。 */
+/** 從回應挑出近月台指期：跳過現貨指數（臺指現貨、代號 -S 結尾）和跨月價差（名稱有「/」）。 */
 export function parseTaifex(json: unknown, market: "0" | "1"): TxfQuote {
 	const j = json as { RtCode?: string; RtMsg?: string; RtData?: { QuoteList?: Record<string, unknown>[] } };
 	if (!j || (j.RtCode !== undefined && String(j.RtCode) !== "0")) throw new TaifexError(`期交所回應錯誤${j?.RtMsg ? `：${j.RtMsg}` : ""}`);
 	const list = j.RtData?.QuoteList ?? [];
-	const q = list.find((x) => !String(x.DispCName ?? "").includes("/") && (n(x.CLastPrice) !== null || n(x.CRefPrice) !== null));
+	const q = list.find((x) => {
+		const name = String(x.DispCName ?? "");
+		if (name.includes("/") || name.includes("現貨") || /-S$/i.test(String(x.SymbolID ?? ""))) return false;
+		return n(x.CLastPrice) !== null || n(x.CRefPrice) !== null;
+	});
 	if (!q) throw new TaifexError("期交所沒有台指期報價");
 	const t = String(q.CTime ?? "").trim();
 	return {
@@ -103,7 +137,7 @@ export async function fetchTaifex(market: "0" | "1"): Promise<TxfQuote> {
 	return parseTaifex(json, market);
 }
 
-/** 收集這一盤的價格做成走勢（只在價格或時間改變時加一點）。 */
+/** 收集這一盤的價格做成走勢（交易中、價格或成交時間改變時才加一點）。 */
 export class TxfTape {
 	private key = "";
 	points: Point[] = [];
@@ -119,23 +153,31 @@ export class TxfTape {
 	}
 
 	add(q: TxfQuote, nowSec = Date.now() / 1000): Point[] {
-		const key = sessionKey(q.market, nowSec);
+		let changed = false;
+		const key = tapeKey(nowSec);
 		if (key !== this.key) {
+			// 換盤了（或留著的是更早以前的圖）：重新開始
 			this.key = key;
 			this.points = [];
 			this.lastTime = "";
+			changed = true;
 		}
-		if (q.last !== null && q.time !== this.lastTime) {
+		// 收盤中價格不會動，不加點；期交所沒給成交時間時，只看價格有沒有變
+		const open = txfSession(nowSec) !== "closed";
+		if (open && q.last !== null && (q.time === "" || q.time !== this.lastTime)) {
 			const prev = this.points[this.points.length - 1];
 			if (!prev || prev.v !== q.last || nowSec - prev.t > 300) {
 				this.points.push({ t: Math.round(nowSec), v: q.last });
 				if (this.points.length > MAX_POINTS) this.points.splice(0, this.points.length - MAX_POINTS);
+				changed = true;
 			}
+			if (this.lastTime !== q.time) changed = true;
 			this.lastTime = q.time;
-			this.app.saveLocalStorage(LS_TXF_POINTS, { key: this.key, points: this.points, lastTime: this.lastTime });
 		}
+		if (changed) this.app.saveLocalStorage(LS_TXF_POINTS, { key: this.key, points: this.points, lastTime: this.lastTime });
 		return this.points;
 	}
 }
 
 export const SESSION_TEXT: Record<TxfSession, string> = { day: "日盤交易中", night: "夜盤交易中", closed: "收盤" };
+export const HALTED_TEXT = "休市";

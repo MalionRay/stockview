@@ -193,3 +193,26 @@ test("估值區間顯示合理價位：色條上的細線和「現價高／低 x
 	assert.equal(b.querySelector(".sv-bar"), null, "沒有上下限就沒有色條");
 	assert.match(text(b), /合理 \$100\.00，現價低 10\.0%/);
 });
+
+test("手指按著的時候不重畫（點擊不會落空），放開後補畫", async () => {
+	let price = 10;
+	ob.__setRequestHandler(async () => ({ status: 200, json: chart({ price, prev: 10 }) }));
+	const { el, plugin, view } = await mount([["Portfolio/AAA.md", note({ ticker: "AAA", shares: 1, cost: 1 })]]);
+	await plugin.feed.round();
+	const btn = el.querySelector("tbody .sv-ticker") as HTMLButtonElement;
+	const ev = (type: string) => el.dispatchEvent(new (window as any).Event(type, { bubbles: true }));
+	ev("pointerdown");
+	price = 20;
+	await plugin.feed.round();
+	assert.equal(el.querySelector("tbody .sv-ticker"), btn, "按著的時候沒有換掉按鈕");
+	assert.match(text(el.querySelector("tbody .sv-price")!), /10\.00/);
+	ev("pointerup");
+	await new Promise((r) => setTimeout(r, 120));
+	assert.match(text(el.querySelector("tbody .sv-price")!), /20\.00/, "放開後補畫");
+	// 沒收到「放開」：3 秒後照常更新，畫面不會卡住
+	ev("pointerdown");
+	(view as any).pressedAt = Date.now() - 4000;
+	price = 30;
+	await plugin.feed.round();
+	assert.match(text(el.querySelector("tbody .sv-price")!), /30\.00/);
+});

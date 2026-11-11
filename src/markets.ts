@@ -253,14 +253,18 @@ export async function fetchChart(symbol: string, r: RangeDef): Promise<Series> {
 	return parseSeries(json, r);
 }
 
+const MISSING_TTL = 6 * 3600_000;
+
 /** 抓一個項目的走勢（含交叉匯率的備援與快取）。 */
 export class MarketData {
 	private cache = new Map<string, { at: number; s: Series }>();
+	private missing = new Map<string, number>(); // Yahoo 沒有的代號（404）→ 發現的時間；6 小時內直接用換算，不再白問
 
 	constructor(private fetcher: (symbol: string, r: RangeDef) => Promise<Series> = fetchChart) {}
 
 	clear(): void {
 		this.cache.clear();
+		this.missing.clear();
 	}
 
 	cached(item: MarketItem, r: RangeDef): Series | null {
@@ -279,11 +283,15 @@ export class MarketData {
 
 	async get(item: MarketItem, r: RangeDef, now = Date.now()): Promise<Series> {
 		let s: Series;
+		const fb = item.fallback;
+		// 之前問過、Yahoo 沒有這個代號：直接用美元匯率換算
+		const skip = !!fb && now - (this.missing.get(item.symbol) ?? -Infinity) < MISSING_TTL;
 		try {
+			if (skip) throw new MarketError("Yahoo 沒有這個代號", 404);
 			s = await this.raw(item.symbol, r, now);
 		} catch (e) {
-			const fb = item.fallback;
 			if (!fb || (e as MarketError).status === 429) throw e;
+			if (!skip && (e as MarketError).status === 404) this.missing.set(item.symbol, now);
 			const mul = await Promise.all(fb.mul.map((x) => this.raw(x, r, now)));
 			const div = await Promise.all(fb.div.map((x) => this.raw(x, r, now)));
 			s = combineSeries(item.symbol, mul, div);

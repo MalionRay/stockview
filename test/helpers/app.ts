@@ -58,7 +58,7 @@ export function makeApp(files: FileMap = new Map()) {
 		secretStorage: { getSecret: (k: string) => secrets.get(k) ?? null, setSecret: (k: string, v: string) => void secrets.set(k, v), listSecrets: () => [...secrets.keys()] },
 		loadLocalStorage: (k: string) => ls.get(k) ?? null,
 		saveLocalStorage: (k: string, v: unknown) => (v === null ? ls.delete(k) : ls.set(k, v)),
-		workspace: { getLeavesOfType: () => [], getActiveFile: () => null, getLeaf: () => ({ openFile: async () => undefined }), onLayoutReady: (f: () => void) => f() },
+		workspace: { on: () => ({}), getLeavesOfType: () => [], getActiveFile: () => null, getLeaf: () => ({ openFile: async () => undefined }), onLayoutReady: (f: () => void) => f() },
 		metadataCache: { getFileCache: (f: any) => ({ frontmatter: parseFm(String(files.get(f.path) ?? "")) }) },
 		fileManager: {
 			processFrontMatter: async (f: any, fn: (fm: Record<string, unknown>) => void) => {

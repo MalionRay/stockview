@@ -167,7 +167,9 @@ export function checkListName(name: string, existing: string[]): string | null {
 	const n = name.trim();
 	if (!n) return "請輸入清單名稱";
 	if (n.length > 30) return "名稱最多 30 個字";
-	if (/[\\/:*?"<>|#^[\]]/.test(n) || n.startsWith(".")) return "名稱不能有 \\ / : * ? \" < > | # ^ [ ]，也不能用 . 開頭";
+	if (/[\\/:*?"<>|#^[\]]/.test(n) || n.startsWith(".") || n.endsWith(".")) return "名稱不能有 \\ / : * ? \" < > | # ^ [ ]，也不能用 . 開頭或結尾";
+	// Windows 不能當資料夾名稱的保留字（同步到電腦會出問題）
+	if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(n)) return `「${n}」不能當資料夾名稱，請換一個`;
 	if (n === MAIN_LIST_NAME || n === "全部" || n === ALL_LISTS) return `「${n}」是保留的名稱`;
 	if (existing.some((e) => e.toLowerCase() === n.toLowerCase())) return "已經有這個清單了";
 	return null;

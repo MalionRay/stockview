@@ -32,7 +32,9 @@ export default class StockViewPlugin extends Plugin {
 			settings: this.settings,
 			alarms: this.alarms,
 			ratings: this.ratings,
-			viewOpen: () => this.app.workspace.getLeavesOfType(VIEW_TYPE).length > 0,
+			// 還沒載入的分頁（Obsidian 啟動時背景分頁會延後載入）不算開著
+			viewOpen: () => this.dashboards().length > 0,
+			viewVisible: () => !document.hidden && this.dashboards().some((v) => v.contentEl.isShown()),
 			onAlarm: (e) => this.notify(e),
 		});
 
@@ -44,7 +46,7 @@ export default class StockViewPlugin extends Plugin {
 		this.addCommand({ id: "markets", name: "打開市場行情", callback: () => void this.openMarkets() });
 		this.addCommand({ id: "add", name: "新增股票", callback: () => this.openHoldingModal({ list: this.defaultAddList() }) });
 		this.addCommand({ id: "add-list", name: "新增清單", callback: () => this.openListModal() });
-		this.addCommand({ id: "refresh", name: "重新整理報價", callback: () => this.feed.kick() });
+		this.addCommand({ id: "refresh", name: "重新整理報價", callback: () => this.feed.refreshNow() });
 		this.addCommand({ id: "finnhub-key", name: "設定 Finnhub 金鑰", callback: () => new FinnhubKeyModal(this.app, this).open() });
 		this.addSettingTab(new StockViewSettingTab(this.app, this));
 
@@ -61,6 +63,17 @@ export default class StockViewPlugin extends Plugin {
 		this.registerEvent(this.app.metadataCache.on("changed", (f) => onFile(f.path)));
 		this.registerEvent(this.app.vault.on("delete", (f) => onFile(f.path)));
 		this.registerEvent(this.app.vault.on("rename", (f, old) => (onFile(f.path), onFile(old))));
+
+		// 儀表板切回來、Obsidian 回到前景、網路恢復：馬上更新一次（看不到的時候只用背景的頻率抓）
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", (leaf) => {
+				if (leaf?.view instanceof DashboardView) this.feed.kick();
+			}),
+		);
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (!document.hidden && this.dashboards().length) this.feed.kick();
+		});
+		this.registerDomEvent(window, "online", () => this.feed.kick());
 
 		this.app.workspace.onLayoutReady(() => {
 			this.feed.start();
@@ -82,6 +95,14 @@ export default class StockViewPlugin extends Plugin {
 	async saveSettings(): Promise<void> {
 		Object.assign(this.settings, sanitizeSettings(this.settings as unknown as Record<string, unknown>));
 		await this.saveData(this.settings);
+	}
+
+	/** 已經載入的儀表板（延後載入、還沒打開過的分頁不算）。 */
+	private dashboards(): DashboardView[] {
+		return this.app.workspace
+			.getLeavesOfType(VIEW_TYPE)
+			.map((l) => l.view)
+			.filter((v): v is DashboardView => v instanceof DashboardView);
 	}
 
 	inFolder(path: string): boolean {
