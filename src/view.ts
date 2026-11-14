@@ -1,8 +1,9 @@
-// 儀表板：總計卡片＋持股表格（現價、今日漲跌、盤前盤後、市值、損益、估值區間、華爾街評級）＋警示紀錄。
+// 儀表板：總計卡片＋各清單小計＋持股表格（現價、今日漲跌、盤前盤後、市值、損益、估值區間、華爾街評級）＋警示紀錄。
 // 每次更新只重畫內容，不換掉外框，表格的左右捲動位置會留著。
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import { alarmText } from "./alarm";
-import { Row, rangeState, toBase, totals, fairPos, vsFair } from "./calc";
+import { Row, Totals, rangeState, toBase, totals, fairPos, vsFair } from "./calc";
+import { AccountSummary, accountSummary, share } from "./account";
 import { VIEW_TYPE } from "./config";
 import * as F from "./format";
 import { ALL_LISTS, Holding, MAIN_LIST, listLabel } from "./holdings";
@@ -38,6 +39,7 @@ export class DashboardView extends ItemView {
 	private listsEl!: HTMLElement;
 	private noticeEl!: HTMLElement;
 	private cardsEl!: HTMLElement;
+	private breakEl!: HTMLElement;
 	private tableEl!: HTMLTableElement;
 	private emptyEl!: HTMLElement;
 	private logEl!: HTMLDetailsElement;
@@ -101,6 +103,7 @@ export class DashboardView extends ItemView {
 		this.listsEl = root.createDiv("sv-lists");
 		this.noticeEl = root.createDiv("sv-notices");
 		this.cardsEl = root.createDiv("sv-cards");
+		this.breakEl = root.createDiv("sv-break");
 		this.emptyEl = root.createDiv("sv-empty");
 		const wrap = root.createDiv("sv-table-wrap");
 		this.tableEl = wrap.createEl("table", { cls: "sv-table" });
@@ -133,6 +136,9 @@ export class DashboardView extends ItemView {
 		this.contentEl.dataset.color = s.colorStyle;
 		const sel = p.selectedList();
 		const rows = feed.rows(sel);
+		const vis = feed.visibleLists();
+		// 總覽：「全部」，或只有一個清單（那個清單就是全部）
+		const overview = sel === ALL_LISTS || vis.length <= 1;
 		this.renderLists(sel);
 
 		// 狀態列
@@ -150,13 +156,16 @@ export class DashboardView extends ItemView {
 		const note = (text: string, cls = "") => this.noticeEl.createDiv({ cls: `sv-notice ${cls}`, text });
 		if (feed.status) note(feed.status, "sv-warn");
 		const t = totals(rows, s.base, feed.fx);
-		if (t.fxMissing) note("匯率還沒抓到，暫用 1 美元＝32 台幣", "sv-warn");
+		const all = overview ? t : totals(feed.rows(), s.base, feed.fx);
+		const acc = accountSummary(feed.account, all, s.base, feed.fx);
+		if (t.fxMissing || (acc?.needsFx && feed.fx === null)) note("匯率還沒抓到，暫用 1 美元＝32 台幣", "sv-warn");
 		if (s.showRatings && rows.some((r) => isUsTicker(r.h.ticker))) {
 			if (!p.ratings.key()) note("想看華爾街評級：到設定填 Finnhub 免費金鑰（不填也能用其他功能）");
 			else if (p.ratings.lastError) note(`華爾街評級：${p.ratings.lastError}`, "sv-warn");
 		}
 
-		this.renderCards(t, rows);
+		this.renderCards(t, rows, overview, acc, all);
+		this.renderBreakdown(overview && vis.length > 1, acc, all);
 		this.renderTable(rows);
 		this.renderLog();
 	}
@@ -189,22 +198,136 @@ export class DashboardView extends ItemView {
 		}
 	}
 
-	private renderCards(t: ReturnType<typeof totals>, rows: Row[]): void {
-		const base = this.plugin.settings.base;
+	/**
+	 * 總計卡片。總覽（全部，或只有一個清單）有填投資金額／現金時：總資產、總盈虧、今日損益、現金、總市值、未實現損益；
+	 * 沒填時是原本的四張，再加一張「＋ 設定投資金額與現金」。單一清單：這個清單的四張，總市值下面寫佔總資產多少。
+	 */
+	private renderCards(t: Totals, rows: Row[], overview: boolean, acc: AccountSummary | null, all: Totals): void {
+		const p = this.plugin;
+		const base = p.settings.base;
 		this.cardsEl.empty();
 		const held = rows.filter((r) => r.h.shares !== null);
-		this.cardsEl.toggle(held.length > 0);
-		if (!held.length) return;
-		const card = (label: string, value: string, sub?: string, d?: "up" | "down" | "flat") => {
+		const show = held.length > 0 || (overview && !!acc);
+		this.cardsEl.toggle(show);
+		if (!show) return;
+		const card = (label: string, value: string, sub?: string, d?: "up" | "down" | "flat", onClick?: () => void) => {
 			const c = this.cardsEl.createDiv("sv-card");
-			c.createDiv({ cls: "sv-card-label", text: label });
+			const lab = c.createDiv({ cls: "sv-card-label", text: label });
 			c.createDiv({ cls: `sv-card-value ${d ? "sv-" + d : ""}`, text: value });
 			if (sub) c.createDiv({ cls: `sv-card-sub ${d ? "sv-" + d : ""}`, text: sub });
+			if (onClick) {
+				c.addClass("sv-card-edit");
+				c.setAttribute("role", "button");
+				c.setAttribute("aria-label", `${label}：點一下修改投資金額與現金`);
+				c.title = "點一下修改投資金額與現金";
+				setIcon(lab.createSpan("sv-card-pen"), "pencil");
+				c.onclick = onClick;
+			}
+			return c;
 		};
-		card("總市值", F.money(t.value, base), t.missing ? `${t.missing} 檔還沒有報價` : `${held.length} 檔持股`);
-		card("總損益", F.money(t.pl, base, true), F.pct(t.plPct), F.dir(t.pl));
+		const edit = () => p.openAccountModal();
+		const pctText = (v: number | null) => (v === null ? "—" : `${v.toFixed(1)}%`);
+		const heldText = t.missing ? `${t.missing} 檔還沒有報價` : `${held.length} 檔持股`;
+		const fxText = (t.needsFx || acc?.needsFx) && p.feed.fx ? `匯率 ${p.feed.fx.toFixed(2)}` : undefined;
+
+		if (overview && acc) {
+			// 剛打開、報價還沒回來：市值是 0，總資產和總盈虧先不顯示（不然會先閃一個很大的虧損）
+			const loading = t.missing > 0 && !p.feed.lastRound;
+			if (loading) card("總資產", "—", "讀取中…");
+			else card("總資產", F.money(acc.assets, base), t.missing ? heldText : `股票 ${pctText(share(t.value, acc.assets))}・現金 ${pctText(share(acc.cash, acc.assets))}`);
+			if (loading) card("總盈虧", "—", "讀取中…", undefined, edit);
+			else if (acc.pl !== null) card("總盈虧", F.money(acc.pl, base, true), `${F.pct(acc.plPct)}・投入 ${F.money(acc.invested, base)}`, F.dir(acc.pl), edit);
+			else card("總盈虧", "—", "填了投資金額才算得出來", undefined, edit);
+			card("今日損益", F.money(t.day, base, true), F.pct(t.dayPct), F.dir(t.day));
+			card("現金", F.money(acc.cash, base), acc.cashEstimated ? "估算：投資金額 − 持股成本" : fxText, undefined, edit);
+			card("總市值", F.money(t.value, base), heldText);
+			card("未實現損益", F.money(t.pl, base, true), `${F.pct(t.plPct)}・成本 ${F.money(t.cost, base)}`, F.dir(t.pl));
+			return;
+		}
+		let valueSub = heldText;
+		if (!overview && !t.missing) {
+			const of = acc ? share(t.value, acc.assets) : share(t.value, all.value);
+			if (of !== null) valueSub += `・佔${acc ? "總資產" : "全部"} ${pctText(of)}`;
+		}
+		card("總市值", F.money(t.value, base), valueSub);
+		card("未實現損益", F.money(t.pl, base, true), F.pct(t.plPct), F.dir(t.pl));
 		card("今日損益", F.money(t.day, base, true), F.pct(t.dayPct), F.dir(t.day));
-		card("總成本", F.money(t.cost, base), t.needsFx && this.plugin.feed.fx ? `匯率 ${this.plugin.feed.fx.toFixed(2)}` : undefined);
+		card("總成本", F.money(t.cost, base), fxText);
+		if (overview) {
+			const c = card("投資金額與現金", "＋ 設定", "算總資產和總盈虧", undefined, edit);
+			c.addClass("sv-card-add");
+		}
+	}
+
+	/** 「全部」的各清單小計：市值、未實現損益、今日損益、佔比（有填帳戶時佔總資產，並多一列現金）。點一列切到那個清單。 */
+	private renderBreakdown(show: boolean, acc: AccountSummary | null, all: Totals): void {
+		const p = this.plugin;
+		const feed = p.feed;
+		const base = p.settings.base;
+		this.breakEl.empty();
+		const items = show
+			? feed
+					.visibleLists()
+					.map((l) => ({ l, rows: feed.rows(l) }))
+					.filter((x) => x.rows.some((r) => r.h.shares !== null))
+					.map((x) => ({ l: x.l, n: x.rows.filter((r) => r.h.shares !== null).length, t: totals(x.rows, base, feed.fx) }))
+					.sort((a, b) => b.t.value - a.t.value)
+			: [];
+		this.breakEl.toggle(items.length > 0);
+		if (!items.length) return;
+		const whole = acc ? acc.assets : all.value;
+		const wrap = this.breakEl.createDiv("sv-break-wrap");
+		const table = wrap.createEl("table", { cls: "sv-table sv-break-table" });
+		const hr = table.createEl("thead").createEl("tr");
+		for (const [label, cls] of [
+			["清單", "sv-c-name"],
+			["市值", "sv-num"],
+			["未實現損益", "sv-num"],
+			["今日損益", "sv-num sv-break-day"],
+			[acc ? "佔總資產" : "佔比", "sv-c-share"],
+		])
+			hr.createEl("th", { cls, text: label });
+		const body = table.createEl("tbody");
+		const shareCell = (tr: HTMLElement, v: number | null) => {
+			const td = tr.createEl("td", { cls: "sv-c-share" });
+			td.createSpan({ cls: "sv-share-text", text: v === null ? "—" : `${v.toFixed(1)}%` });
+			const bar = td.createDiv("sv-share-bar");
+			bar.createDiv("sv-share-fill").style.width = `${Math.max(0, Math.min(100, v ?? 0))}%`;
+		};
+		const money = (tr: HTMLElement, v: number | null, pct: number | null, cls = "") => {
+			const td = tr.createEl("td", { cls: `sv-num ${cls} sv-${F.dir(v)}` });
+			td.createDiv({ text: F.money(v, base, true) });
+			if (pct !== null) td.createDiv({ cls: "sv-sub", text: F.pct(pct) });
+		};
+		for (const it of items) {
+			const tr = body.createEl("tr", { cls: "sv-break-row" });
+			tr.setAttribute("role", "button");
+			tr.title = `看「${listLabel(it.l)}」`;
+			tr.onclick = () => p.selectList(it.l);
+			const name = tr.createEl("td", { cls: "sv-c-name" });
+			name.createDiv({ cls: "sv-break-name", text: listLabel(it.l) });
+			name.createDiv({ cls: "sv-sub", text: it.t.missing ? `${it.t.missing} 檔還沒有報價` : `${it.n} 檔` });
+			tr.createEl("td", { cls: "sv-num", text: F.money(it.t.value, base) });
+			money(tr, it.t.pl, it.t.plPct);
+			money(tr, it.t.day, it.t.dayPct, "sv-break-day");
+			shareCell(tr, share(it.t.value, whole));
+		}
+		if (acc) {
+			const tr = body.createEl("tr", { cls: "sv-break-cash" });
+			const name = tr.createEl("td", { cls: "sv-c-name" });
+			name.createDiv({ cls: "sv-break-name", text: "現金" });
+			if (acc.cashEstimated) name.createDiv({ cls: "sv-sub", text: "估算" });
+			tr.createEl("td", { cls: "sv-num", text: F.money(acc.cash, base) });
+			tr.createEl("td", { cls: "sv-num", text: "" });
+			tr.createEl("td", { cls: "sv-num sv-break-day", text: "" });
+			shareCell(tr, share(acc.cash, whole));
+		}
+		const tot = body.createEl("tr", { cls: "sv-break-total" });
+		tot.createEl("td", { cls: "sv-c-name", text: acc ? "總資產" : "合計" });
+		tot.createEl("td", { cls: "sv-num", text: F.money(whole, base) });
+		money(tot, all.pl, all.plPct);
+		money(tot, all.day, all.dayPct, "sv-break-day");
+		tot.createEl("td", { cls: "sv-c-share", text: whole > 0 ? "100%" : "—" });
 	}
 
 	private sortState(): { key: SortKey; desc: boolean } {

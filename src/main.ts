@@ -5,7 +5,7 @@ import { Alarms } from "./alarms";
 import { DEFAULT_SETTINGS, LS_LIST, StockViewSettings, VIEW_TYPE, sanitizeSettings } from "./config";
 import { Feed } from "./feed";
 import { ALL_LISTS, Holding, MAIN_LIST } from "./holdings";
-import { DeleteHoldingModal, DeleteListModal, HoldingModal, HoldingModalOpts, ListModal, MoveHoldingModal } from "./modals";
+import { AccountModal, DeleteHoldingModal, DeleteListModal, HoldingModal, HoldingModalOpts, ListModal, MoveHoldingModal } from "./modals";
 import { Ratings } from "./ratings";
 import { FinnhubKeyModal, StockViewSettingTab } from "./settings";
 import { beep } from "./sound";
@@ -46,6 +46,7 @@ export default class StockViewPlugin extends Plugin {
 		this.addCommand({ id: "markets", name: "打開市場行情", callback: () => void this.openMarkets() });
 		this.addCommand({ id: "add", name: "新增股票", callback: () => this.openHoldingModal({ list: this.defaultAddList() }) });
 		this.addCommand({ id: "add-list", name: "新增清單", callback: () => this.openListModal() });
+		this.addCommand({ id: "account", name: "設定投資金額與現金", callback: () => this.openAccountModal() });
 		this.addCommand({ id: "refresh", name: "重新整理報價", callback: () => this.feed.refreshNow() });
 		this.addCommand({ id: "finnhub-key", name: "設定 Finnhub 金鑰", callback: () => new FinnhubKeyModal(this.app, this).open() });
 		this.addSettingTab(new StockViewSettingTab(this.app, this));
@@ -149,6 +150,11 @@ export default class StockViewPlugin extends Plugin {
 
 	openDeleteListModal(list: string): void {
 		new DeleteListModal(this.app, this, list).open();
+	}
+
+	openAccountModal(): void {
+		this.feed.reload(); // 「帳戶.md」可能剛同步下來
+		new AccountModal(this.app, this).open();
 	}
 
 	/** 這台裝置目前看的清單；不存在就退回「全部」（只有一個清單時就是那個清單）。 */

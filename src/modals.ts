@@ -18,6 +18,8 @@ import {
 import type StockViewPlugin from "./main";
 import * as F from "./format";
 import { fetchQuote, normalizeTicker } from "./quote";
+import { AccountInput, checkAccount, hasAccount, saveAccount } from "./account";
+import { toBase, totals } from "./calc";
 
 function decimalInput(el: HTMLInputElement): void {
 	el.setAttribute("inputmode", "decimal");
@@ -336,6 +338,90 @@ export class DeleteListModal extends Modal {
 						afterChange(this.plugin);
 					}),
 			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/** 投資金額與現金（整個帳戶一組；存在股票資料夾的「帳戶.md」，會同步）。 */
+export class AccountModal extends Modal {
+	private v: AccountInput;
+
+	constructor(
+		app: App,
+		private plugin: StockViewPlugin,
+	) {
+		super(app);
+		const a = plugin.feed.account;
+		this.v = { invested: a.invested, cash: a.cash, currency: a.exists ? a.currency : plugin.settings.base };
+	}
+
+	onOpen(): void {
+		const el = this.contentEl;
+		const p = this.plugin;
+		this.setTitle("投資金額與現金");
+		el.createEl("p", {
+			cls: "setting-item-description",
+			text: "整個帳戶填一組（清單只是分類）。總資產＝股票市值＋現金；總盈虧＝總資產 − 投資金額，包含已經賣掉的盈虧和股息。兩個都留空＝不顯示。",
+		});
+		const field = (name: string, desc: string, key: "invested" | "cash", ph: string) =>
+			new Setting(el)
+				.setName(name)
+				.setDesc(desc)
+				.addText((t) => {
+					decimalInput(t.inputEl);
+					t.setPlaceholder(ph)
+						.setValue(this.v[key] === null ? "" : String(this.v[key]))
+						.onChange((x) => {
+							this.v[key] = num(x);
+							this.updateEstimate(est);
+						});
+				});
+		new Setting(el).setName("幣別").addDropdown((d) =>
+			d
+				.addOptions({ USD: "美元 USD", TWD: "台幣 TWD" })
+				.setValue(this.v.currency)
+				.onChange((x) => {
+					this.v.currency = x === "TWD" ? "TWD" : "USD";
+					this.updateEstimate(est);
+				}),
+		);
+		field("投資金額", "總共投入的本金；加碼或提款時改", "invested", "25000");
+		field("現金", "券商帳戶裡還沒買股票的錢，照券商 App 的數字填；留空＝用「投資金額 − 持股成本」估算", "cash", "2100");
+		const est = el.createDiv("sv-lookup sv-account-est");
+		this.updateEstimate(est);
+
+		const msg = el.createDiv("sv-modal-msg");
+		new Setting(el).addButton((b) =>
+			b
+				.setButtonText("儲存")
+				.setCta()
+				.onClick(async () => {
+					const e = checkAccount(this.v);
+					if (e) return msg.setText(e);
+					try {
+						await saveAccount(this.app, p.settings.folder, this.v);
+					} catch (err) {
+						return msg.setText(String((err as Error)?.message ?? err));
+					}
+					new Notice(hasAccount({ ...this.v, exists: true }) ? "已更新投資金額與現金" : "已清除投資金額與現金");
+					this.close();
+					afterChange(p);
+				}),
+		);
+	}
+
+	/** 現金留空時會用的估算值（換成帳戶的幣別）。 */
+	private updateEstimate(el: HTMLElement): void {
+		const p = this.plugin;
+		const { base } = p.settings;
+		const fx = p.feed.fx;
+		const cost = toBase(totals(p.feed.rows(), base, fx).cost, base, this.v.currency, fx);
+		if (this.v.cash !== null) el.setText("");
+		else if (this.v.invested === null) el.setText("填了投資金額，現金留空時會自動估算");
+		else el.setText(`現金留空：估算 ${F.money(this.v.invested - cost, this.v.currency)}（投資金額 − 持股成本 ${F.money(cost, this.v.currency)}）`);
 	}
 
 	onClose(): void {

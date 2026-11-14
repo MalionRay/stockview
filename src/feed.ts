@@ -6,6 +6,7 @@ import type { Alarms } from "./alarms";
 import { computeRow, Row } from "./calc";
 import { BG_CLOSED_SEC, BG_OPEN_SEC, FX_SYMBOL, FX_TTL, StockViewSettings } from "./config";
 import { ALL_LISTS, Holding, mergeAcrossLists, readHoldings, readLists, visibleLists } from "./holdings";
+import { Account, NO_ACCOUNT, hasAccount, readAccount } from "./account";
 import { fetchQuote, isUsTicker, Quote, QuoteError } from "./quote";
 import type { Ratings } from "./ratings";
 
@@ -57,6 +58,7 @@ export class Feed {
 	errors = new Map<string, string>();
 	holdings: Holding[] = []; // 每個清單各自的持股（同一清單同一檔已合併）
 	lists: string[] = [];
+	account: Account = NO_ACCOUNT; // 投資金額與現金（股票資料夾裡的「帳戶.md」）
 	fx: number | null = null;
 	fxAt = 0;
 	lastRound = 0;
@@ -94,6 +96,7 @@ export class Feed {
 	reload(): void {
 		this.holdings = readHoldings(this.host.app, this.host.settings.folder);
 		this.lists = readLists(this.host.app, this.host.settings.folder, this.holdings);
+		this.account = readAccount(this.host.app, this.host.settings.folder, this.host.settings.base);
 	}
 
 	/** 畫面上看得到的清單（主清單沒有股票、又有其他清單時不算）。 */
@@ -247,10 +250,10 @@ export class Feed {
 		return events;
 	}
 
-	/** 需要換算幣別時（總計用台幣，或有台股）才抓美元兌台幣，10 分鐘一次。 */
+	/** 需要換算幣別時（總計用台幣、有台股，或投資金額／現金的幣別和總計不同）才抓美元兌台幣，10 分鐘一次。 */
 	private async updateFx(now: number): Promise<void> {
 		const base = this.host.settings.base;
-		const need = this.rows().some((r) => r.h.shares !== null && r.cur !== base);
+		const need = this.rows().some((r) => r.h.shares !== null && r.cur !== base) || (hasAccount(this.account) && this.account.currency !== base);
 		if (!need || now - this.fxAt < FX_TTL) return;
 		try {
 			const q = await withTimeout(this.fetcher(FX_SYMBOL), this.timeoutMs);

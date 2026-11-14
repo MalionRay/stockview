@@ -46,6 +46,9 @@ function root(folder: string): string {
 	return normalizePath(folder || "Portfolio");
 }
 
+/** 股票資料夾（主清單）的路徑。 */
+export const folderRoot = root;
+
 /** 筆記屬於哪個清單；不在股票資料夾裡回傳 null。更深的子資料夾算在第一層的清單裡。 */
 export function listOf(path: string, folder: string): string | null {
 	const r = root(folder);

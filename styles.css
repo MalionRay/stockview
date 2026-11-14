@@ -68,6 +68,31 @@
 .sv-card-label { font-size: var(--font-ui-small); color: var(--text-muted); }
 .sv-card-value { font-size: 1.35em; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .sv-card-sub { font-size: var(--font-ui-small); font-variant-numeric: tabular-nums; }
+/* 可以點的卡片（總盈虧、現金 → 修改投資金額與現金） */
+.sv-card-edit { cursor: pointer; }
+.sv-card-edit:hover { border-color: var(--interactive-accent); }
+.sv-card-pen { display: inline-flex; vertical-align: -2px; margin-left: 4px; opacity: 0.6; }
+.sv-card-pen svg { width: 12px; height: 12px; }
+.sv-card-add { border-style: dashed; background: transparent; }
+.sv-card-add .sv-card-value { font-size: 1.05em; color: var(--text-accent); }
+.sv-card-add .sv-card-sub { color: var(--text-muted); }
+
+/* 「全部」的各清單小計 */
+.sv-break { margin-bottom: 14px; }
+.sv-break-wrap {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+}
+.sv-break-row { cursor: pointer; }
+.sv-break-row:hover td { background: var(--background-modifier-hover); }
+.sv-break-name { font-weight: 600; }
+.sv-break-cash td { color: var(--text-muted); }
+.sv-break-total td { font-weight: 700; border-top: 2px solid var(--background-modifier-border); }
+.sv-table .sv-c-share { min-width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
+.sv-share-bar { height: 4px; border-radius: 2px; background: var(--background-modifier-border); margin-top: 3px; overflow: hidden; }
+.sv-share-fill { height: 100%; background: var(--interactive-accent); }
 
 .sv-empty p { color: var(--text-muted); }
 
@@ -193,6 +218,7 @@
 	.sv-btn-text { display: none; }
 	.sv-cards { grid-template-columns: repeat(2, 1fr); }
 	.sv-card-value { font-size: 1.15em; }
+	.sv-break-day { display: none; }
 }
 
 /* 清單分頁 */

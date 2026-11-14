@@ -70,7 +70,8 @@ test("持股：總計卡片、表格、盤後價、估值區間、評級", async
 	plugin.feed.emit();
 	const cards = [...el.querySelectorAll(".sv-card")].map(text);
 	assert.match(cards[0], /總市值\$2,100\.00/);
-	assert.match(cards[1], /總損益\+\$1,100\.00\+110\.00%/);
+	assert.match(cards[1], /未實現損益\+\$1,100\.00\+110\.00%/);
+	assert.match(cards[4], /投資金額與現金＋ 設定/, "還沒設定投資金額：多一張「＋ 設定」");
 	assert.match(cards[2], /今日損益\+\$100\.00/);
 	const rows = [...el.querySelectorAll("tbody tr")];
 	assert.equal(rows.length, 2);

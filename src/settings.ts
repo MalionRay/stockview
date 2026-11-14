@@ -134,6 +134,10 @@ export class StockViewSettingTab extends PluginSettingTab {
 					}),
 			);
 		new Setting(el)
+			.setName("投資金額與現金")
+			.setDesc("整個帳戶一組，用來算總資產（股票市值＋現金）和總盈虧（總資產 − 投資金額）。存在股票資料夾的「帳戶.md」，會跟著同步。")
+			.addButton((b) => b.setButtonText("設定…").onClick(() => p.openAccountModal()));
+		new Setting(el)
 			.setName("自動同步（Remotely Save）")
 			.setDesc("新增／修改／刪除股票後、打開儀表板或按重新整理時，自動觸發 Remotely Save 同步，別台裝置很快就看得到。沒裝 Remotely Save 就不會做任何事。")
 			.addToggle((t) =>
