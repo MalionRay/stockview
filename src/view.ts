@@ -1,7 +1,7 @@
 // 儀表板：總計卡片＋各清單小計＋持股表格（現價、今日漲跌、盤前盤後、市值、損益、估值區間、華爾街評級）＋警示紀錄。
 // 每次更新只重畫內容，不換掉外框，表格的左右捲動位置會留著。
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
-import { alarmText } from "./alarm";
+import { alarmText, isUpAlarm } from "./alarm";
 import { Row, Totals, rangeState, toBase, totals, fairPos, vsFair } from "./calc";
 import { AccountSummary, accountSummary, share } from "./account";
 import { VIEW_TYPE } from "./config";
@@ -556,7 +556,7 @@ export class DashboardView extends ItemView {
 		this.logEl.open = this.logOpen;
 		this.logEl.createEl("summary", { text: `警示紀錄（${log.length}）` });
 		const ul = this.logEl.createEl("ul");
-		for (const e of log) ul.createEl("li", { cls: e.kind === "high" ? "sv-up" : "sv-down", text: `${F.dateTime(e.at)}　${alarmText(e)}` });
+		for (const e of log) ul.createEl("li", { cls: isUpAlarm(e.kind) ? "sv-up" : "sv-down", text: `${F.dateTime(e.at)}　${alarmText(e)}` });
 		const clr = this.logEl.createEl("button", { text: "清除紀錄" });
 		clr.onclick = () => {
 			this.plugin.alarms.clearLog();

@@ -11,7 +11,7 @@
 - 不要用假的 User-Agent 或其他方式繞過網站的機器人檢查
 
 ## 資料
-- 持股：設定的資料夾（預設 Portfolio）每檔一篇筆記，frontmatter：ticker、shares、cost（每股平均成本）、low、fair、high（估值下限／合理價位／上限；上下限是警示線，fair 只顯示不警示，v0.5.0）；格式和舊 Dataview 儀表板相同（舊筆記沒有 fair 照常）
+- 持股：設定的資料夾（預設 Portfolio）每檔一篇筆記，frontmatter：ticker、shares、cost（每股平均成本）、low、fair、high（估值下限／合理價位／上限；上下限是警示線；fair v0.5.0 只顯示，v0.8.0 起穿過也響，見「更新與警示」）；格式和舊 Dataview 儀表板相同（舊筆記沒有 fair 照常）
 - 合理價位 fair：合併時取第一個有填的；checkInput 要求 low ≤ fair ≤ high；估值區間欄在色條上畫一條主題色細線（fairPos），下面寫「合理 $x，現價高／低 y%」（vsFair，用警示價格；差不到 0.5% 寫接近合理價）；只填 fair 沒有上下限時只顯示那行字；加到其他清單也預填
 - 多個清單（v0.2.0）：清單＝資料夾底下第一層子資料夾（更深的算在第一層）；直接放在資料夾裡的是「主清單」（MAIN_LIST ""，不能改名刪除；沒有股票又有其他清單時不顯示，visibleLists）；空的子資料夾也是清單（readLists 讀 TFolder.children）
 - 同一檔可以在好幾個清單，各有自己的股數、成本、上下限；清單內同一檔分好幾篇才合併（mergeHoldings，key＝清單|代號）：股數相加、成本加權平均、上下限用路徑排序第一篇有填的；「全部」（ALL_LISTS "*"）跨清單合併成一列（mergeAcrossLists），lists 記在哪些清單；「全部」是各清單持股的加總，只合併股數大於 0 的（feed.rows 先 filter isHeld，v0.7.1 使用者 2026-11-15 要求）：股數空白或 0 的不列入「全部」（表格、分頁數字、小計都不算），某個清單是 0 股時那個清單也不算在 lists 裡；它們在自己的清單照樣看得到
@@ -35,6 +35,7 @@
 - kick()：正在抓就記下來（again），這一輪結束後馬上再抓一次（之前會被吃掉）；儀表板切回來（active-leaf-change）、Obsidian 回到前景（visibilitychange）、網路恢復（online）都會 kick；排程每次先 reload 再判斷要不要跑（啟動後第一次才知道有沒有警示線）
 - Yahoo 429：間隔加倍（從 30 秒起）最多 5 分鐘，成功就恢復；全部連不上（QuoteError.network：離線、逾時）時顯示離線，代號查不到、格式不對不算離線
 - 警示（src/alarm.ts 純函式＋src/alarms.ts 狀態）：每個清單的每一檔各自判斷（key＝清單|代號），同一輪同一檔同一條線在好幾個清單都響時只通知一次（其他清單也記成已響）；非主清單的通知後面加（清單名）；價格 ≥ 上限或 ≤ 下限響一次；之後要回到界線內 bufferPct%（預設 1%）才重新待命；同一檔 cooldownMin（預設 30 分鐘）內不再響，冷卻中沒響的仍待命；改了界線就重新待命；last=null 表示還沒響過
+- 合理價位警示（v0.8.0，使用者 2026-11-15 要求「由下至上或由上至下都要響」）：checkAlarm 的 fairUp／fairDown（kind "fair-up"／"fair-down"，文字「漲過合理價位」「跌破合理價位」）。第一次看到價格（或剛改了合理價位、舊版存下來的狀態）只記下在哪一邊，不響——不然打開儀表板時每檔都會響；之後價格 ≥ fair 且之前在下方 → 響「漲過」；≤ fair 且之前在上方 → 響「跌破」。在哪一邊有緩衝：要在下方超過 bufferPct%（< fair×(1−buf)）才算在下方、上方超過 bufferPct%（> fair×(1+buf)）才算在上方，所以在線附近震盪不會一直響；冷卻時間和上下限共用（AlarmState.last）；設定「合理價位也提醒」（alarmFair，預設開）；只有合理價位也算有警示線（hasAlarmLines，背景檢查）；🔕 只標上下限；提示音音程比上下限小（sound.beep）
 - 警示價格：alarmUseExtended（預設開）且不是盤中時用盤前／盤後價（calc.effectivePrice）；估值區間的位置也用同一個價格
 - 警示狀態與紀錄（最近 50 筆）存 localStorage，重開不重響；不在清單上的狀態不刪（啟動時筆記快取可能還沒好）
 - 通知：Notice（點一下才關）＋提示音（src/sound.ts Web Audio，iOS 要在點擊時 unlockAudio，儀表板任何點擊都會呼叫）＋桌機系統 Notification

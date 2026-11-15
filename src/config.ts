@@ -13,6 +13,7 @@ export interface StockViewSettings {
 	showRatings: boolean;
 	alarmEnabled: boolean;
 	alarmUseExtended: boolean; // 盤前盤後也判斷
+	alarmFair: boolean; // 穿過合理價位（由下往上、由上往下）也提醒
 	alarmBufferPct: number;
 	alarmCooldownMin: number;
 	alarmSound: boolean;
@@ -29,6 +30,7 @@ export const DEFAULT_SETTINGS: StockViewSettings = {
 	showRatings: true,
 	alarmEnabled: true,
 	alarmUseExtended: true,
+	alarmFair: true,
 	alarmBufferPct: 1,
 	alarmCooldownMin: 30,
 	alarmSound: true,

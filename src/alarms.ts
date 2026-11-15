@@ -12,6 +12,7 @@ export interface AlarmItem {
 	ticker: string;
 	low: number | null;
 	high: number | null;
+	fair?: number | null;
 	price: number | null;
 }
 

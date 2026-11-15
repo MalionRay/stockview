@@ -174,12 +174,21 @@ export class StockViewSettingTab extends PluginSettingTab {
 		secField("收盤時（秒）", "儀表板開著、收盤時多久更新一次（最少 10 秒）", "closedRefreshSec", 10);
 
 		new Setting(el).setName("價格警示").setHeading();
-		new Setting(el).setName("開啟價格警示").setDesc("突破估值上限或跌破下限時提醒").addToggle((t) =>
+		new Setting(el).setName("開啟價格警示").setDesc("突破估值上限、跌破下限，或穿過合理價位時提醒").addToggle((t) =>
 			t.setValue(s.alarmEnabled).onChange(async (v) => {
 				s.alarmEnabled = v;
 				await save();
 			}),
 		);
+		new Setting(el)
+			.setName("合理價位也提醒")
+			.setDesc("價格由下往上或由上往下穿過合理價位時提醒。第一次看到價格時只記下在哪一邊，不會響；在合理價位附近震盪不會一直響（要先離開緩衝區）")
+			.addToggle((t) =>
+				t.setValue(s.alarmFair).onChange(async (v) => {
+					s.alarmFair = v;
+					await save();
+				}),
+			);
 		new Setting(el).setName("盤前、盤後也提醒").setDesc("用盤前／盤後價判斷").addToggle((t) =>
 			t.setValue(s.alarmUseExtended).onChange(async (v) => {
 				s.alarmUseExtended = v;

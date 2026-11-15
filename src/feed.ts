@@ -138,7 +138,8 @@ export class Feed {
 	}
 
 	hasAlarmLines(): boolean {
-		return this.holdings.some((h) => h.low !== null || h.high !== null);
+		const fair = this.host.settings.alarmFair;
+		return this.holdings.some((h) => h.low !== null || h.high !== null || (fair && h.fair !== null));
 	}
 
 	private visible(): boolean {
@@ -242,8 +243,8 @@ export class Feed {
 			this.lastRound = now();
 			const s = this.host.settings;
 			if (s.alarmEnabled) {
-				const items = this.listRows().map((r) => ({ list: r.h.list, ticker: r.h.ticker, low: r.h.low, high: r.h.high, price: r.alarmPrice }));
-				events = this.host.alarms.check(items, { bufferPct: s.alarmBufferPct, cooldownMin: s.alarmCooldownMin }, now());
+				const items = this.listRows().map((r) => ({ list: r.h.list, ticker: r.h.ticker, low: r.h.low, high: r.h.high, fair: r.h.fair, price: r.alarmPrice }));
+				events = this.host.alarms.check(items, { bufferPct: s.alarmBufferPct, cooldownMin: s.alarmCooldownMin, fair: s.alarmFair }, now());
 				if (events.length) this.host.onAlarm(events);
 			}
 			if (s.showRatings && this.host.viewOpen()) void this.host.ratings.refresh(all.filter(isUsTicker));

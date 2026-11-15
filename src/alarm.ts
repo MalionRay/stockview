@@ -1,23 +1,31 @@
-// 價格警示（純函式）：突破上限或跌破下限時響一次。
+// 價格警示（純函式）：突破上限或跌破下限時響一次；穿過合理價位（由下往上、由上往下）也響（v0.8.0）。
 // - 緩衝區：響過之後，價格要回到界線內 bufferPct% 才會重新啟動（震盪期不會一直響）
 // - 冷卻時間：同一檔響過之後 cooldownMin 分鐘內不再響
+// - 合理價位：第一次看到價格（或剛改了合理價位）只記下在哪一邊，不響；之後穿過去才響。
+//   往上穿過要先在合理價位下方超過 bufferPct%、往下穿過要先在上方超過 bufferPct%（在線附近震盪不會一直響）
 export interface AlarmState {
 	highArmed: boolean;
 	lowArmed: boolean;
 	last: number | null; // 上次響的時間（ms）；null＝還沒響過
 	hi?: number | null; // 上次看到的上限／下限：改了界線就重新待命
 	lo?: number | null;
+	fa?: number | null; // 上次看到的合理價位：改了就重新記位置
+	fairUp?: boolean; // 往上穿過合理價位會響（在下方）；undefined＝還不知道在哪一邊
+	fairDown?: boolean; // 往下穿過合理價位會響（在上方）
 }
 
 export interface AlarmCfg {
 	bufferPct: number;
 	cooldownMin: number;
+	fair?: boolean; // 合理價位也提醒（沒給＝要）
 }
+
+export type AlarmKind = "high" | "low" | "fair-up" | "fair-down";
 
 export interface AlarmEvent {
 	ticker: string;
 	list?: string; // 哪個清單的警示線（"" 是主清單）
-	kind: "high" | "low";
+	kind: AlarmKind;
 	line: number;
 	price: number;
 	at: number;
@@ -29,7 +37,7 @@ export function freshState(): AlarmState {
 
 export function checkAlarm(
 	prev: AlarmState | undefined,
-	h: { ticker: string; low: number | null; high: number | null },
+	h: { ticker: string; low: number | null; high: number | null; fair?: number | null },
 	price: number | null,
 	now: number,
 	cfg: AlarmCfg,
@@ -39,6 +47,13 @@ export function checkAlarm(
 	if (s.lo !== undefined && s.lo !== h.low) s.lowArmed = true;
 	s.hi = h.high;
 	s.lo = h.low;
+	const fair = cfg.fair === false ? null : h.fair ?? null;
+	if (fair === null || (s.fa !== undefined && s.fa !== fair)) {
+		delete s.fairUp; // 沒有合理價位、或改了：重新記位置
+		delete s.fairDown;
+	}
+	if (fair === null) delete s.fa;
+	else s.fa = fair;
 	const events: AlarmEvent[] = [];
 	if (price === null || !isFinite(price)) return { state: s, events };
 	const buf = Math.max(0, cfg.bufferPct) / 100;
@@ -58,11 +73,35 @@ export function checkAlarm(
 			s.last = now;
 		} else if (!s.lowArmed && price > h.low * (1 + buf)) s.lowArmed = true;
 	} else s.lowArmed = true;
+	if (fair !== null) {
+		if (s.fairUp === undefined || s.fairDown === undefined) {
+			// 第一次看到價格（或剛改了合理價位）：只記下在哪一邊
+			s.fairUp = price < fair;
+			s.fairDown = price > fair;
+		} else {
+			if (s.fairUp && price >= fair && !cooling()) {
+				events.push({ ticker: h.ticker, kind: "fair-up", line: fair, price, at: now });
+				s.fairUp = false;
+				s.last = now;
+			} else if (!s.fairUp && price < fair * (1 - buf)) s.fairUp = true;
+			if (s.fairDown && price <= fair && !cooling()) {
+				events.push({ ticker: h.ticker, kind: "fair-down", line: fair, price, at: now });
+				s.fairDown = false;
+				s.last = now;
+			} else if (!s.fairDown && price > fair * (1 + buf)) s.fairDown = true;
+		}
+	}
 	return { state: s, events };
+}
+
+/** 往上的警示（突破上限、漲過合理價位）。 */
+export function isUpAlarm(kind: AlarmKind): boolean {
+	return kind === "high" || kind === "fair-up";
 }
 
 export function alarmText(e: AlarmEvent): string {
 	const p = e.price.toLocaleString("en-US", { maximumFractionDigits: 2 });
 	const where = e.list ? `（${e.list}）` : "";
-	return e.kind === "high" ? `${e.ticker} 突破上限 ${e.line}，現價 ${p}${where}` : `${e.ticker} 跌破下限 ${e.line}，現價 ${p}${where}`;
+	const what = { high: "突破上限", low: "跌破下限", "fair-up": "漲過合理價位", "fair-down": "跌破合理價位" }[e.kind];
+	return `${e.ticker} ${what} ${e.line}，現價 ${p}${where}`;
 }
