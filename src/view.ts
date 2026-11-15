@@ -6,7 +6,7 @@ import { Row, Totals, rangeState, toBase, totals, fairPos, vsFair } from "./calc
 import { AccountSummary, accountSummary, share } from "./account";
 import { VIEW_TYPE } from "./config";
 import * as F from "./format";
-import { ALL_LISTS, Holding, MAIN_LIST, listLabel } from "./holdings";
+import { ALL_LISTS, Holding, MAIN_LIST, isHeld, listLabel } from "./holdings";
 import type StockViewPlugin from "./main";
 import { SESSION_LABEL, Session, isUsTicker } from "./quote";
 import { ratingInfo } from "./ratings";
@@ -145,7 +145,7 @@ export class DashboardView extends ItemView {
 		this.statusEl.empty();
 		// 市場狀態：有任何一檔在盤中就顯示盤中，其次盤前／盤後
 		const order: Session[] = ["regular", "pre", "post", "closed"];
-		const sessions = new Set(feed.rows().map((r) => r.q?.session).filter((x): x is Session => !!x));
+		const sessions = new Set(feed.holdings.map((h) => feed.quotes.get(h.ticker)?.session).filter((x): x is Session => !!x));
 		const ses = order.find((x) => sessions.has(x));
 		if (ses) this.statusEl.createSpan({ cls: `sv-session sv-s-${ses}`, text: SESSION_LABEL[ses] });
 		this.statusEl.createSpan({ text: feed.lastRound ? `更新 ${F.clock(feed.lastRound)}` : "讀取中…" });
@@ -182,7 +182,7 @@ export class DashboardView extends ItemView {
 			if (count !== null) b.createSpan({ cls: "sv-list-count", text: String(count) });
 			b.onclick = () => p.selectList(key);
 		};
-		if (vis.length > 1) tab(ALL_LISTS, "全部", new Set(feed.holdings.map((h) => h.ticker)).size);
+		if (vis.length > 1) tab(ALL_LISTS, "全部", feed.rows(ALL_LISTS).length); // 只算有持股的（股數大於 0）
 		for (const l of vis) tab(l, listLabel(l), feed.holdings.filter((h) => h.list === l).length);
 		const add = this.listsEl.createEl("button", { cls: "sv-list-add", text: "＋ 新清單", attr: { "aria-label": "新增清單" } });
 		add.onclick = () => p.openListModal();
@@ -206,7 +206,7 @@ export class DashboardView extends ItemView {
 		const p = this.plugin;
 		const base = p.settings.base;
 		this.cardsEl.empty();
-		const held = rows.filter((r) => r.h.shares !== null);
+		const held = rows.filter((r) => isHeld(r.h));
 		const show = held.length > 0 || (overview && !!acc);
 		this.cardsEl.toggle(show);
 		if (!show) return;
@@ -269,8 +269,8 @@ export class DashboardView extends ItemView {
 			? feed
 					.visibleLists()
 					.map((l) => ({ l, rows: feed.rows(l) }))
-					.filter((x) => x.rows.some((r) => r.h.shares !== null))
-					.map((x) => ({ l: x.l, n: x.rows.filter((r) => r.h.shares !== null).length, t: totals(x.rows, base, feed.fx) }))
+					.filter((x) => x.rows.some((r) => isHeld(r.h))) // 股數都是空白或 0 的清單不列
+					.map((x) => ({ l: x.l, n: x.rows.filter((r) => isHeld(r.h)).length, t: totals(x.rows, base, feed.fx) }))
 					.sort((a, b) => b.t.value - a.t.value)
 			: [];
 		this.breakEl.toggle(items.length > 0);
@@ -359,8 +359,8 @@ export class DashboardView extends ItemView {
 		};
 		return [...rows].sort((a, b) => {
 			// 持股在前、觀察名單在後
-			const ha = a.h.shares !== null ? 0 : 1;
-			const hb = b.h.shares !== null ? 0 : 1;
+			const ha = isHeld(a.h) ? 0 : 1;
+			const hb = isHeld(b.h) ? 0 : 1;
 			if (ha !== hb && key !== "ticker") return ha - hb;
 			const va = val(a);
 			const vb = val(b);
@@ -381,7 +381,9 @@ export class DashboardView extends ItemView {
 			const sel = p.selectedList();
 			this.emptyEl.createEl("p", {
 				text:
-					p.feed.holdings.length && sel !== ALL_LISTS
+					p.feed.holdings.length && sel === ALL_LISTS
+						? "「全部」只列股數大於 0 的持股。只追蹤（股數空白）或 0 股的股票在各自的清單裡。"
+						: p.feed.holdings.length
 						? `「${listLabel(sel)}」還沒有股票。`
 						: `還沒有股票。按「新增股票」，或在「${p.settings.folder}」資料夾放筆記（frontmatter 寫 ticker、shares、cost、low、fair、high；子資料夾是不同的清單）。`,
 			});
@@ -411,7 +413,7 @@ export class DashboardView extends ItemView {
 	private renderRow(body: HTMLElement, r: Row): void {
 		const p = this.plugin;
 		const q = r.q;
-		const tr = body.createEl("tr", { cls: r.h.shares === null ? "sv-watch" : "" });
+		const tr = body.createEl("tr", { cls: isHeld(r.h) ? "" : "sv-watch" });
 
 		// 股票
 		const name = tr.createEl("td", { cls: "sv-c-name" });
@@ -420,7 +422,7 @@ export class DashboardView extends ItemView {
 		if (q?.name) name.createDiv({ cls: "sv-name", text: q.name });
 		const err = p.feed.errors.get(r.h.ticker);
 		if (err) name.createDiv({ cls: "sv-err", text: err });
-		if (r.h.shares === null) name.createDiv({ cls: "sv-tag", text: "觀察" });
+		if (!isHeld(r.h)) name.createDiv({ cls: "sv-tag", text: r.h.shares === null ? "觀察" : "0 股" });
 		// 「全部」裡標出在哪些清單
 		if (p.selectedList() === ALL_LISTS && p.feed.visibleLists().length > 1) name.createDiv({ cls: "sv-in-lists", text: r.h.lists.map(listLabel).join("、") });
 

@@ -34,14 +34,15 @@ export function effectivePrice(q: Quote | null, useExtended: boolean): number | 
 export function computeRow(h: Holding, q: Quote | null, useExtended = true): Row {
 	const cur = q?.currency || guessCurrency(h.ticker);
 	const price = q?.price ?? null;
-	const has = price !== null && h.shares !== null;
+	const held = h.shares !== null && h.shares > 0; // 股數 0（賣光了還在追蹤）和空白一樣，不算市值、損益（v0.7.1）
+	const has = price !== null && held;
 	const value = has ? price! * h.shares! : null;
-	const costTotal = h.shares !== null && h.cost !== null ? h.cost * h.shares : null;
+	const costTotal = held && h.cost !== null ? h.cost * h.shares! : null;
 	const pl = value !== null && costTotal !== null ? value - costTotal : null;
 	const plPct = pl !== null && costTotal ? (pl / costTotal) * 100 : null;
 	const dayChg = price !== null && q?.prevClose ? price - q.prevClose : null;
 	const dayPct = dayChg !== null && q?.prevClose ? (dayChg / q.prevClose) * 100 : null;
-	const dayPl = dayChg !== null && h.shares !== null ? dayChg * h.shares : null;
+	const dayPl = dayChg !== null && held ? dayChg * h.shares! : null;
 	return { h, q, cur, value, costTotal, pl, plPct, dayChg, dayPct, dayPl, alarmPrice: effectivePrice(q, useExtended) };
 }
 
@@ -75,7 +76,7 @@ export function totals(rows: Row[], base: Base, fx: number | null): Totals {
 	let missing = 0;
 	let needsFx = false;
 	for (const r of rows) {
-		if (r.h.shares === null) continue; // 只追蹤
+		if (r.h.shares === null || !(r.h.shares > 0)) continue; // 只追蹤（股數空白或 0）
 		if (r.cur !== base) needsFx = true;
 		if (r.costTotal !== null) cost += toBase(r.costTotal, r.cur, base, fx);
 		if (r.value === null) {

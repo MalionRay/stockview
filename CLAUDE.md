@@ -14,10 +14,10 @@
 - 持股：設定的資料夾（預設 Portfolio）每檔一篇筆記，frontmatter：ticker、shares、cost（每股平均成本）、low、fair、high（估值下限／合理價位／上限；上下限是警示線，fair 只顯示不警示，v0.5.0）；格式和舊 Dataview 儀表板相同（舊筆記沒有 fair 照常）
 - 合理價位 fair：合併時取第一個有填的；checkInput 要求 low ≤ fair ≤ high；估值區間欄在色條上畫一條主題色細線（fairPos），下面寫「合理 $x，現價高／低 y%」（vsFair，用警示價格；差不到 0.5% 寫接近合理價）；只填 fair 沒有上下限時只顯示那行字；加到其他清單也預填
 - 多個清單（v0.2.0）：清單＝資料夾底下第一層子資料夾（更深的算在第一層）；直接放在資料夾裡的是「主清單」（MAIN_LIST ""，不能改名刪除；沒有股票又有其他清單時不顯示，visibleLists）；空的子資料夾也是清單（readLists 讀 TFolder.children）
-- 同一檔可以在好幾個清單，各有自己的股數、成本、上下限；清單內同一檔分好幾篇才合併（mergeHoldings，key＝清單|代號）：股數相加、成本加權平均、上下限用路徑排序第一篇有填的；「全部」（ALL_LISTS "*"）跨清單合併成一列（mergeAcrossLists），lists 記在哪些清單
+- 同一檔可以在好幾個清單，各有自己的股數、成本、上下限；清單內同一檔分好幾篇才合併（mergeHoldings，key＝清單|代號）：股數相加、成本加權平均、上下限用路徑排序第一篇有填的；「全部」（ALL_LISTS "*"）跨清單合併成一列（mergeAcrossLists），lists 記在哪些清單；「全部」是各清單持股的加總，只合併股數大於 0 的（feed.rows 先 filter isHeld，v0.7.1 使用者 2026-11-15 要求）：股數空白或 0 的不列入「全部」（表格、分頁數字、小計都不算），某個清單是 0 股時那個清單也不算在 lists 裡；它們在自己的清單照樣看得到
 - 畫面目前的清單存 localStorage stockview:list（每台裝置各自；不存在就回到全部，只有一個清單就是那個）；新增股票預設放目前的清單（看全部時放第一個）
 - 清單名稱 checkListName：不能空白、最多 30 字、不能有 \ / : * ? " < > | # ^ [ ]、不能 . 開頭或結尾、不能是 Windows 保留字（CON、PRN、AUX、NUL、COM1～9、LPT1～9，同步到電腦會出問題）、不能叫「主清單」「全部」、不分大小寫不能重複
-- shares 空白＝只追蹤（觀察，不算損益）
+- shares 空白＝只追蹤（觀察，不算損益）；shares 0（例如賣光了還在追蹤）也一樣不算持股（holdings.isHeld：股數大於 0 才算；computeRow 不算市值、成本、損益，totals 不算「還沒有報價」），清單裡標「0 股」、和觀察一起排在後面
 - 新增／編輯／刪除也可以在儀表板做（HoldingModal、DeleteHoldingModal）：新增建立筆記（含買進理由、估值想法、紀錄三段）；編輯只改 frontmatter；刪除用 fileManager.trashFile（照 Obsidian 的刪除設定）；同一清單分在多篇的不能在視窗改
 - 移到其他清單（MoveHoldingModal，fileManager.renameFile 搬筆記；目的地已有這檔就不行）；加到其他清單（HoldingModal 預填代號與上下限）；清單新增／改名（ListModal，renameFile 搬資料夾）／刪除（DeleteListModal，整個資料夾 trashFile）
 - 報價（src/quote.ts）：Yahoo chart API（query1…/v8/finance/chart/<代號>?interval=1m&range=1d&includePrePost=true），每檔一次請求，同時最多 4 個（feed.pool）；session 依 meta.currentTradingPeriod；盤前／盤後價＝最後一根有價格的 1 分 K 落在 pre／post 區間；交易時段已經換成下一個交易日（半夜、週末）對不上時的備援：最後一根 K 比 regularMarketTime 晚 90 秒以上就是延長時段的價格（隔 6 小時以上算盤前，否則盤後，v0.6.0）

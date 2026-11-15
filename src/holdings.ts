@@ -36,6 +36,11 @@ export function listLabel(list: string): string {
 }
 
 /** frontmatter 的數字：空白、null、不是數字都當作沒填。允許 "1,200"。 */
+/** 有持股＝股數大於 0。股數空白（只追蹤）或 0（例如賣光了還想追蹤）都不算持股（v0.7.1）。 */
+export function isHeld(h: { shares: number | null }): boolean {
+	return h.shares !== null && h.shares > 0;
+}
+
 export function num(v: unknown): number | null {
 	if (v === null || v === undefined || v === "") return null;
 	const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, "").trim());

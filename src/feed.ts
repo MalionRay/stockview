@@ -5,7 +5,7 @@ import type { AlarmEvent } from "./alarm";
 import type { Alarms } from "./alarms";
 import { computeRow, Row } from "./calc";
 import { BG_CLOSED_SEC, BG_OPEN_SEC, FX_SYMBOL, FX_TTL, StockViewSettings } from "./config";
-import { ALL_LISTS, Holding, mergeAcrossLists, readHoldings, readLists, visibleLists } from "./holdings";
+import { ALL_LISTS, Holding, isHeld, mergeAcrossLists, readHoldings, readLists, visibleLists } from "./holdings";
 import { Account, NO_ACCOUNT, hasAccount, readAccount } from "./account";
 import { fetchQuote, isUsTicker, Quote, QuoteError } from "./quote";
 import type { Ratings } from "./ratings";
@@ -105,8 +105,12 @@ export class Feed {
 	}
 
 	/** 某個清單的列；ALL_LISTS（預設）＝全部清單，同一檔合併成一列。 */
+	/**
+	 * 一個清單的列；「全部」是各清單的持股加總，只算股數大於 0 的（v0.7.1：股數空白或 0 的不列入，
+	 * 同一檔在某個清單是 0 股，那個清單也不算在這一列的「在哪些清單」裡）。
+	 */
 	rows(list: string = ALL_LISTS): Row[] {
-		const hs = list === ALL_LISTS ? mergeAcrossLists(this.holdings) : this.holdings.filter((h) => h.list === list);
+		const hs = list === ALL_LISTS ? mergeAcrossLists(this.holdings.filter(isHeld)) : this.holdings.filter((h) => h.list === list);
 		return hs.map((h) => computeRow(h, this.quotes.get(h.ticker) ?? null, this.host.settings.alarmUseExtended));
 	}
 
@@ -253,7 +257,7 @@ export class Feed {
 	/** 需要換算幣別時（總計用台幣、有台股，或投資金額／現金的幣別和總計不同）才抓美元兌台幣，10 分鐘一次。 */
 	private async updateFx(now: number): Promise<void> {
 		const base = this.host.settings.base;
-		const need = this.rows().some((r) => r.h.shares !== null && r.cur !== base) || (hasAccount(this.account) && this.account.currency !== base);
+		const need = this.rows().some((r) => isHeld(r.h) && r.cur !== base) || (hasAccount(this.account) && this.account.currency !== base);
 		if (!need || now - this.fxAt < FX_TTL) return;
 		try {
 			const q = await withTimeout(this.fetcher(FX_SYMBOL), this.timeoutMs);
