@@ -2,7 +2,7 @@ import "../test/helpers/dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_SETTINGS } from "../src/config";
-import { MarketData, RangeDef, Series } from "../src/markets";
+import { MarketData, RangeDef, Series, vixLevel } from "../src/markets";
 import { LS_MARKET_RANGE, LS_MARKET_TAB, MarketsView } from "../src/marketview";
 import { LS_TXF_POINTS } from "../src/taifex";
 import { makeApp } from "./helpers/app";
@@ -26,7 +26,7 @@ async function mount(fetcher: (s: string, r: RangeDef) => Promise<Series>, taife
 
 const text = (el: Element) => el.textContent ?? "";
 
-test("預設美股、1日：四個指數卡片，有數值、漲跌與走勢圖", async () => {
+test("預設美股、1日：五張卡片（四個指數＋VIX），有數值、漲跌與走勢圖", async () => {
 	const { view, el, calls } = await mount(async (s) => series(s, 110, 100));
 	assert.deepEqual(
 		[...el.querySelectorAll(".sv-market-tabs .sv-list-tab")].map(text),
@@ -34,9 +34,9 @@ test("預設美股、1日：四個指數卡片，有數值、漲跌與走勢圖"
 	);
 	assert.match(text(el.querySelector(".sv-market-tabs .is-active")!), /美股/);
 	assert.match(text(el.querySelector(".sv-ranges .is-active")!), /1日/);
-	assert.deepEqual(calls, ["^GSPC@1d", "^DJI@1d", "^IXIC@1d", "^SOX@1d"]);
+	assert.deepEqual(calls, ["^GSPC@1d", "^DJI@1d", "^IXIC@1d", "^SOX@1d", "^VIX@1d"]);
 	const cards = [...el.querySelectorAll(".sv-mcard")];
-	assert.equal(cards.length, 4);
+	assert.equal(cards.length, 5);
 	assert.match(text(cards[0]), /S&P 500\^GSPC收盤110\.00\+10\.00（\+10\.00%）比昨收/);
 	assert.ok(cards[0].querySelector(".sv-chart.sv-up svg"));
 	await view.onClose();
@@ -151,5 +151,20 @@ test("自動更新：看不到這一頁時不抓；台指期交易中每 30 秒�
 	const card = [...el.querySelectorAll(".sv-mcard")].find((c) => (c as HTMLElement).dataset.symbol === "TXF")!;
 	assert.match(text(card.querySelector(".sv-session")!), /休市/);
 	assert.equal(tapeKeyOf(ls), fri, "休市時不記錄，上一盤（週五夜盤）的圖留著");
+	await view.onClose();
+});
+
+test("VIX：數值旁邊標恐慌程度（15 以下平靜、15～20 正常、20～30 緊張、30 以上恐慌）", async () => {
+	assert.deepEqual(
+		[null, 12.3, 15, 19.99, 20, 29.9, 30, 45].map((v) => vixLevel(v)?.label ?? "—"),
+		["—", "平靜", "正常", "正常", "緊張", "緊張", "恐慌", "恐慌"],
+	);
+	const { view, el } = await mount(async (s) => (s === "^VIX" ? series(s, 32.5, 25) : series(s, 110, 100)));
+	const cards = [...el.querySelectorAll(".sv-mcard")];
+	const vix = cards[4];
+	assert.match(text(vix), /^VIX 恐慌指數\^VIX/);
+	assert.equal(text(vix.querySelector(".sv-vix")!), "恐慌");
+	assert.ok(vix.querySelector(".sv-vix-panic"));
+	assert.equal(cards[0].querySelector(".sv-vix"), null, "其他指數不標");
 	await view.onClose();
 });

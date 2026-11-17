@@ -387,3 +387,9 @@
 .workspace-leaf-content[data-type^="stockview-"] > .view-content {
 	padding-bottom: calc(var(--sv-navbar-gap, 0px) + 16px);
 }
+
+/* VIX 恐慌程度（不跟漲跌顏色走：越高越緊張） */
+.sv-vix { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: var(--font-ui-small); font-weight: 600; vertical-align: middle; border: 1px solid var(--background-modifier-border); }
+.sv-vix-calm, .sv-vix-normal { color: var(--text-muted); }
+.sv-vix-tense { color: var(--text-warning); border-color: var(--text-warning); }
+.sv-vix-panic { color: var(--text-on-accent, #fff); background: var(--text-error); border-color: var(--text-error); }

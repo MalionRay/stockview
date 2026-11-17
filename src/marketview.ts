@@ -4,7 +4,7 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import { drawChart } from "./chart";
 import * as F from "./format";
 import type StockViewPlugin from "./main";
-import { MARKETS, Market, MarketData, MarketItem, Point, RANGES, RangeDef, Series, fmtLevel, rangeOf, timeLabel } from "./markets";
+import { MARKETS, Market, MarketData, MarketItem, Point, RANGES, RangeDef, Series, fmtLevel, rangeOf, timeLabel, vixLevel } from "./markets";
 import { HALTED_TEXT, SESSION_TEXT, TxfQuote, TxfTape, fetchTaifex, txfHalted, txfMarket, txfSession } from "./taifex";
 
 export const MARKET_VIEW = "stockview-markets";
@@ -248,6 +248,11 @@ export class MarketsView extends ItemView {
 		const val = card.createDiv("sv-mcard-val");
 		val.createSpan({ cls: "sv-mcard-last", text: fmtLevel(s.last, fx) });
 		if (fx && item.unit) val.createSpan({ cls: "sv-muted", text: ` 台幣／${item.unit}` });
+		const vix = item.gauge === "vix" ? vixLevel(s.last) : null;
+		if (vix) {
+			const b = val.createSpan({ cls: `sv-vix sv-vix-${vix.id}`, text: vix.label });
+			b.title = "VIX：15 以下平靜、15～20 正常、20～30 緊張、30 以上恐慌（常見的看法）";
+		}
 		const c = card.createDiv(`sv-mcard-chg sv-${dir}`);
 		c.setText(`${F.signedNum(chg, fx ? 3 : 2)}（${F.pct(pct)}）`);
 		card.createSpan({ cls: "sv-muted sv-mcard-period", text: r.id === "1d" ? "比昨收" : `${r.label}來` });

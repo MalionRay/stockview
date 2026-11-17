@@ -9,8 +9,21 @@ export interface MarketItem {
 	scale?: number; // 匯率：1 單位外幣用幾個（日圓 100、韓元 1000）
 	unit?: string; // 匯率顯示用，例如「100 日圓」
 	kind?: "taifex"; // 台指期：資料來自期交所，不受期間切換影響
+	gauge?: "vix"; // VIX：數值旁邊標恐慌程度（vixLevel）
 	/** 這個代號拿不到時，用美元匯率換算：值＝mul 相乘 ÷ div 相乘 */
 	fallback?: { mul: string[]; div: string[] };
+}
+
+/**
+ * VIX 的恐慌程度（常見的看法，不是官方分級）：
+ * 15 以下平靜、15～20 正常、20～30 緊張、30 以上恐慌。
+ */
+export function vixLevel(v: number | null): { id: "calm" | "normal" | "tense" | "panic"; label: string } | null {
+	if (v === null || !isFinite(v)) return null;
+	if (v < 15) return { id: "calm", label: "平靜" };
+	if (v < 20) return { id: "normal", label: "正常" };
+	if (v < 30) return { id: "tense", label: "緊張" };
+	return { id: "panic", label: "恐慌" };
 }
 
 export interface Market {
@@ -29,6 +42,7 @@ export const MARKETS: Market[] = [
 			{ symbol: "^DJI", name: "道瓊工業" },
 			{ symbol: "^IXIC", name: "那斯達克綜合" },
 			{ symbol: "^SOX", name: "費城半導體" },
+			{ symbol: "^VIX", name: "VIX 恐慌指數", gauge: "vix" },
 		],
 	},
 	{
