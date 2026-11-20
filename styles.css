@@ -198,9 +198,25 @@
 .sv-r-s { background: #d9822b; color: #fff; }
 .sv-r-ss { background: #c4302b; color: #fff; }
 
-.sv-log { margin-top: 14px; }
-.sv-log summary { cursor: pointer; color: var(--text-muted); }
-.sv-log ul { margin: 6px 0; padding-left: 20px; font-size: var(--font-ui-small); }
+/* 警示訊息：鈴鐺上的未讀數、視窗裡的清單 */
+.sv-bell { position: relative; }
+.sv-badge {
+	position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px;
+	border-radius: 9px; background: var(--text-error); color: #fff; font-size: 11px; font-weight: 700;
+	line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.sv-inbox { max-height: 60vh; overflow-y: auto; margin: 8px 0; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.sv-inbox-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--background-modifier-border); }
+.sv-inbox-item:first-child { border-top: none; }
+.sv-inbox-item.is-new { background: var(--background-modifier-hover); }
+.sv-inbox-body { flex: 1; min-width: 0; }
+.sv-inbox-text { font-weight: 600; overflow-wrap: anywhere; }
+.sv-inbox-time { font-size: var(--font-ui-small); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.sv-inbox-new { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 8px; background: var(--interactive-accent); color: var(--text-on-accent, #fff); font-size: 11px; font-weight: 700; }
+.sv-inbox-del { flex: none; min-width: 36px; min-height: 36px; }
+.sv-inbox-empty { color: var(--text-muted); padding: 12px 0; }
+.sv-inbox-foot { display: flex; justify-content: flex-end; }
+.sv-statusbar { cursor: pointer; }
 
 .sv-foot { margin-top: 16px; font-size: 0.8em; color: var(--text-faint); }
 

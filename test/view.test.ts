@@ -29,6 +29,7 @@ async function mount(files: [string, string][], opts: { key?: boolean; settings?
 	plugin.openDeleteModal = (h: { ticker: string }) => plugin.opened.push("delete:" + h.ticker);
 	plugin.openNote = (p: string) => plugin.opened.push("note:" + p);
 	plugin.openSettings = () => plugin.opened.push("settings");
+	plugin.openInbox = () => plugin.opened.push("inbox");
 	plugin.syncCalls = [] as number[];
 	plugin.sync = { now: async (gap: number) => (plugin.syncCalls.push(gap), true), soon: () => undefined };
 	const view = new DashboardView({ app } as never, plugin);
@@ -109,15 +110,22 @@ test("點代號出現選單；點表頭換排序", async () => {
 	assert.deepEqual(order(), ["AAA", "BBB"]);
 });
 
-test("沒有金鑰：提示可以填 Finnhub；警示紀錄顯示與清除", async () => {
+test("沒有金鑰：提示可以填 Finnhub；響過的警示在鈴鐺上顯示未讀數，點鈴鐺打開警示訊息", async () => {
 	ob.__setRequestHandler(async () => ({ status: 200, json: chart({ price: 300 }) }));
 	const { el, plugin } = await mount([["Portfolio/AAA.md", note({ ticker: "AAA", shares: 1, high: 250 })]]);
+	const badge = () => el.querySelector(".sv-bell .sv-badge") as HTMLElement;
+	assert.equal(badge().style.display, "none", "還沒有警示：不顯示數字");
 	await plugin.feed.round();
 	assert.match(text(el.querySelector(".sv-notices")!), /Finnhub/);
-	assert.match(text(el.querySelector(".sv-log")!), /警示紀錄（1）.*AAA 突破上限 250/);
 	assert.match(text(el), /突破上限 🔕/);
-	(el.querySelector(".sv-log button") as HTMLButtonElement).click();
-	assert.equal((el.querySelector(".sv-log") as HTMLElement).style.display, "none");
+	assert.equal(el.querySelector(".sv-log"), null, "舊的「警示紀錄」拿掉了");
+	assert.equal(text(badge()), "1");
+	assert.notEqual(badge().style.display, "none");
+	assert.equal(el.querySelector(".sv-bell")!.getAttribute("aria-label"), "警示訊息（1 則沒看過）");
+	(el.querySelector(".sv-bell") as HTMLButtonElement).click();
+	assert.deepEqual(plugin.opened, ["inbox"]);
+	plugin.alarms.markRead(); // 在別的地方看過了：鈴鐺馬上跟著變
+	assert.equal(badge().style.display, "none");
 });
 
 test("多個清單：分頁、切換、全部合併、新增到目前清單、清單選單", async () => {

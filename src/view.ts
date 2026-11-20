@@ -1,7 +1,6 @@
-// 儀表板：總計卡片＋各清單小計＋持股表格（現價、今日漲跌、盤前盤後、市值、損益、估值區間、華爾街評級）＋警示紀錄。
+// 儀表板：總計卡片＋各清單小計＋持股表格（現價、今日漲跌、盤前盤後、市值、損益、估值區間、華爾街評級）；鈴鐺打開警示訊息。
 // 每次更新只重畫內容，不換掉外框，表格的左右捲動位置會留著。
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
-import { alarmText, isUpAlarm } from "./alarm";
 import { Row, Totals, rangeState, toBase, totals, fairPos, vsFair } from "./calc";
 import { AccountSummary, accountSummary, share } from "./account";
 import { VIEW_TYPE } from "./config";
@@ -42,8 +41,8 @@ export class DashboardView extends ItemView {
 	private breakEl!: HTMLElement;
 	private tableEl!: HTMLTableElement;
 	private emptyEl!: HTMLElement;
-	private logEl!: HTMLDetailsElement;
-	private logOpen = false;
+	private badgeEl!: HTMLElement;
+	private unsubAlarms: (() => void) | null = null;
 	private pressedAt = 0; // 手指／滑鼠按下去的時間：按著的時候先不重畫（不然剛好重畫，那一下點擊會落空）
 	private dirty = false;
 
@@ -98,6 +97,9 @@ export class DashboardView extends ItemView {
 			this.plugin.feed.refreshNow();
 			void this.plugin.sync.now(15_000); // 順便拉別台裝置新增的股票
 		});
+		const bell = btn("bell", "警示訊息", () => this.plugin.openInbox());
+		bell.addClass("sv-bell");
+		this.badgeEl = bell.createSpan("sv-badge");
 		btn("settings", "設定", () => this.plugin.openSettings());
 
 		this.listsEl = root.createDiv("sv-lists");
@@ -107,11 +109,10 @@ export class DashboardView extends ItemView {
 		this.emptyEl = root.createDiv("sv-empty");
 		const wrap = root.createDiv("sv-table-wrap");
 		this.tableEl = wrap.createEl("table", { cls: "sv-table" });
-		this.logEl = root.createEl("details", { cls: "sv-log" });
-		this.logEl.addEventListener("toggle", () => (this.logOpen = this.logEl.open));
 		root.createDiv({ cls: "sv-foot", text: "報價：Yahoo Finance（免費，可能有延遲）· 評級：Finnhub（分析師共識，僅供參考）· 不構成投資建議" });
 
 		this.unsub = this.plugin.feed.subscribe(() => this.render());
+		this.unsubAlarms = this.plugin.alarms.onChange(() => this.renderBadge());
 		this.render();
 		this.plugin.feed.kick();
 		void this.plugin.sync.now(60_000);
@@ -120,6 +121,8 @@ export class DashboardView extends ItemView {
 	async onClose(): Promise<void> {
 		this.unsub?.();
 		this.unsub = null;
+		this.unsubAlarms?.();
+		this.unsubAlarms = null;
 	}
 
 	render(): void {
@@ -167,7 +170,7 @@ export class DashboardView extends ItemView {
 		this.renderCards(t, rows, overview, acc, all);
 		this.renderBreakdown(overview && vis.length > 1, acc, all);
 		this.renderTable(rows);
-		this.renderLog();
+		this.renderBadge();
 	}
 
 	/** 清單分頁：全部（有兩個以上清單時）、各清單（股票數）、＋ 新清單、⋯（改名／刪除目前清單）。 */
@@ -548,19 +551,11 @@ export class DashboardView extends ItemView {
 		m.showAtMouseEvent(e);
 	}
 
-	private renderLog(): void {
-		const log = this.plugin.alarms.log;
-		this.logEl.empty();
-		this.logEl.toggle(log.length > 0);
-		if (!log.length) return;
-		this.logEl.open = this.logOpen;
-		this.logEl.createEl("summary", { text: `警示紀錄（${log.length}）` });
-		const ul = this.logEl.createEl("ul");
-		for (const e of log) ul.createEl("li", { cls: isUpAlarm(e.kind) ? "sv-up" : "sv-down", text: `${F.dateTime(e.at)}　${alarmText(e)}` });
-		const clr = this.logEl.createEl("button", { text: "清除紀錄" });
-		clr.onclick = () => {
-			this.plugin.alarms.clearLog();
-			this.render();
-		};
+	/** 鈴鐺上的未讀數（沒看過的警示訊息）。 */
+	private renderBadge(): void {
+		const n = this.plugin.alarms.unread();
+		this.badgeEl.setText(n > 99 ? "99+" : String(n));
+		this.badgeEl.toggle(n > 0);
+		this.badgeEl.parentElement?.setAttribute("aria-label", n ? `警示訊息（${n} 則沒看過）` : "警示訊息");
 	}
 }

@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, LS_LIST, StockViewSettings, VIEW_TYPE, sanitizeSettin
 import { Feed } from "./feed";
 import { ALL_LISTS, Holding, MAIN_LIST } from "./holdings";
 import { AccountModal, DeleteHoldingModal, DeleteListModal, HoldingModal, HoldingModalOpts, ListModal, MoveHoldingModal } from "./modals";
+import { AlarmInboxModal } from "./inbox";
 import { Ratings } from "./ratings";
 import { FinnhubKeyModal, StockViewSettingTab } from "./settings";
 import { beep } from "./sound";
@@ -42,6 +43,19 @@ export default class StockViewPlugin extends Plugin {
 		this.registerView(MARKET_VIEW, (leaf: WorkspaceLeaf) => new MarketsView(leaf, this));
 		this.addRibbonIcon("line-chart", "StockView", () => void this.openDashboard());
 		this.addRibbonIcon("globe", "StockView 市場行情", () => void this.openMarkets());
+		this.addCommand({ id: "alarm-inbox", name: "打開警示訊息", callback: () => this.openInbox() });
+		// 桌機狀態列：有沒看過的警示時顯示「🔔 N」，點一下打開警示訊息（手機版沒有狀態列）
+		const bar = this.addStatusBarItem();
+		bar.addClass("mod-clickable", "sv-statusbar");
+		bar.setAttribute("aria-label", "StockView 警示訊息");
+		bar.onclick = () => this.openInbox();
+		const showBar = () => {
+			const n = this.alarms.unread();
+			bar.setText(n ? `🔔 ${n} 則警示` : "");
+			bar.toggle(n > 0);
+		};
+		showBar();
+		this.register(this.alarms.onChange(showBar));
 		this.addCommand({ id: "open", name: "打開儀表板", callback: () => void this.openDashboard() });
 		this.addCommand({ id: "markets", name: "打開市場行情", callback: () => void this.openMarkets() });
 		this.addCommand({ id: "add", name: "新增股票", callback: () => this.openHoldingModal({ list: this.defaultAddList() }) });
@@ -191,13 +205,25 @@ export default class StockViewPlugin extends Plugin {
 		s.openTabById(this.manifest.id);
 	}
 
-	/** 警示：Obsidian 通知（點一下才關）＋提示音；桌機另外跳系統通知。 */
+	openInbox(): void {
+		new AlarmInboxModal(this.app, this).open();
+	}
+
+	/**
+	 * 警示：Obsidian 通知（點一下打開警示訊息）＋提示音；桌機另外跳系統通知。
+	 * 訊息本身已經存進警示訊息（Alarms.check），通知不見了也找得到。
+	 */
 	notify(events: AlarmEvent[]): void {
 		for (const e of events) {
-			new Notice(`🔔 ${alarmText(e)}`, 0);
+			const n = new Notice(`🔔 ${alarmText(e)}（點一下看警示訊息）`, 0) as Notice & { messageEl?: HTMLElement; noticeEl?: HTMLElement };
+			(n.messageEl ?? n.noticeEl)?.addEventListener("click", () => this.openInbox());
 			if (Platform.isDesktopApp && typeof Notification !== "undefined") {
 				try {
-					new Notification("StockView", { body: alarmText(e) });
+					const sys = new Notification("StockView", { body: alarmText(e) });
+					sys.onclick = () => {
+						window.focus();
+						this.openInbox();
+					};
 				} catch {
 					// 沒有系統通知權限就只顯示 Obsidian 通知
 				}

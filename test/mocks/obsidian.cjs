@@ -40,7 +40,8 @@ class ItemView {
 class Modal {
 	constructor(app) {
 		this.app = app;
-		this.contentEl = document.createElement("div");
+		this.modalEl = document.createElement("div");
+		this.contentEl = this.modalEl.appendChild(document.createElement("div"));
 	}
 	open() {
 		globalThis.__lastModal = this;
@@ -109,7 +110,12 @@ class Setting {
 }
 const notices = [];
 class Notice {
-	constructor(m) { this.message = m; notices.push(m); }
+	constructor(m) {
+		this.message = m;
+		notices.push(m);
+		this.messageEl = typeof document !== "undefined" ? document.createElement("div") : null;
+		globalThis.__lastNotice = this;
+	}
 	setMessage(m) { this.message = m; }
 	hide() {}
 }
