@@ -526,6 +526,7 @@ export class DashboardView extends ItemView {
 		const vis = feed.visibleLists();
 		const many = vis.length > 1;
 		const m = new Menu();
+		m.addItem((i) => i.setTitle("走勢圖").setIcon("line-chart").onClick(() => p.openChart(r)));
 		if (perList.length > 1) {
 			for (const h of perList) m.addItem((i) => i.setTitle(`編輯（${listLabel(h.list)}）…`).setIcon("pencil").onClick(() => p.openHoldingModal({ existing: h })));
 			for (const h of perList) m.addItem((i) => i.setTitle(`打開筆記（${listLabel(h.list)}）`).setIcon("file-text").onClick(() => p.openNote(h.paths[0])));

@@ -384,6 +384,56 @@
 .sv-chart-tip-t { color: var(--text-muted); }
 .sv-chart-tip-pct { color: var(--text-muted); }
 .sv-markets .sv-head .sv-btns { margin-left: auto; }
+/* 個股走勢圖（v0.10.0）：價位虛線、上下緣箭頭、盤前盤後淺色底、視窗 */
+.sv-chart-band { fill: var(--text-faint); opacity: 0.12; }
+.sv-chart-lvl { stroke-width: 1.5; stroke-dasharray: 6 4; }
+.sv-chart-lvl.sv-lvl-low { stroke: var(--color-blue, #3b82f6); }
+.sv-chart-lvl.sv-lvl-high { stroke: var(--color-orange, #f59e0b); }
+.sv-chart-lvl.sv-lvl-fair { stroke: var(--interactive-accent); }
+.sv-chart-lvl.sv-lvl-cost { stroke: var(--text-muted); stroke-dasharray: 2 3; }
+.sv-chart-lvl-lab {
+	position: absolute;
+	left: 2px; /* 左邊是比較舊的資料；右邊留給最新的價格點 */
+	transform: translateY(-50%);
+	font-size: 0.7em;
+	line-height: 1.3;
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--background-primary);
+	opacity: 0.9;
+	pointer-events: none;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+.sv-lvl-low { color: var(--color-blue, #3b82f6); }
+.sv-lvl-high { color: var(--color-orange, #f59e0b); }
+.sv-lvl-fair { color: var(--interactive-accent); }
+.sv-lvl-cost { color: var(--text-muted); }
+.sv-chart-edge {
+	position: absolute;
+	right: 2px;
+	font-size: 0.7em;
+	color: var(--text-muted);
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--background-primary);
+	opacity: 0.9;
+	pointer-events: none;
+	white-space: nowrap;
+}
+.sv-chart-edge.is-top { top: -2px; }
+.sv-chart-edge.is-bottom { bottom: -2px; }
+.sv-chart-modal { width: min(760px, 96vw); }
+.sv-chart-modal .sv-root { padding: 0; }
+.sv-chart-modal .sv-chart-body { height: 260px; }
+.sv-chart-modal .sv-ranges { margin: 8px 0 4px; }
+.sv-sc-price { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.sv-sc-last { font-size: 1.6em; font-weight: 700; }
+.sv-sc-ext { font-size: var(--font-ui-small); font-variant-numeric: tabular-nums; }
+.sv-sc-chart { min-height: 120px; transition: opacity 0.2s; }
+.sv-sc-chart.sv-loading { opacity: 0.55; }
+.sv-sc-period { font-size: var(--font-ui-small); font-variant-numeric: tabular-nums; }
+.sv-sc-levels { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: var(--font-ui-small); font-variant-numeric: tabular-nums; }
 .sv-mcard-info { font-size: 0.8em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .sv-mcard-note { font-size: 0.75em; margin-top: 4px; }
 /* 合理價位：色條上的細線＋文字 */

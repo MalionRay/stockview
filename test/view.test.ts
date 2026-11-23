@@ -30,6 +30,7 @@ async function mount(files: [string, string][], opts: { key?: boolean; settings?
 	plugin.openNote = (p: string) => plugin.opened.push("note:" + p);
 	plugin.openSettings = () => plugin.opened.push("settings");
 	plugin.openInbox = () => plugin.opened.push("inbox");
+	plugin.openChart = (r: { h: { ticker: string } }) => plugin.opened.push("chart:" + r.h.ticker);
 	plugin.syncCalls = [] as number[];
 	plugin.sync = { now: async (gap: number) => (plugin.syncCalls.push(gap), true), soon: () => undefined };
 	const view = new DashboardView({ app } as never, plugin);
@@ -98,10 +99,12 @@ test("點代號出現選單；點表頭換排序", async () => {
 	const menu = (globalThis as any).__lastMenu;
 	assert.deepEqual(
 		menu.items.map((i: { title: string }) => i.title),
-		["編輯…", "打開筆記", "刪除…"],
+		["走勢圖", "編輯…", "打開筆記", "刪除…"],
 	);
-	menu.items[2].cb();
+	menu.items[3].cb();
 	assert.deepEqual(plugin.opened, ["delete:AAA"]);
+	menu.items[0].cb();
+	assert.deepEqual(plugin.opened, ["delete:AAA", "chart:AAA"], "走勢圖");
 	const priceTh = [...el.querySelectorAll("th")].find((th) => text(th).startsWith("現價")) as HTMLElement;
 	priceTh.click();
 	assert.deepEqual(ls.get(LS_SORT), { key: "price", desc: true });
@@ -148,7 +151,7 @@ test("多個清單：分頁、切換、全部合併、新增到目前清單、�
 	let menu = (globalThis as any).__lastMenu;
 	assert.deepEqual(
 		menu.items.map((i: { title: string }) => i.title),
-		["編輯（帳戶A）…", "編輯（帳戶B）…", "打開筆記（帳戶A）", "打開筆記（帳戶B）"],
+		["走勢圖", "編輯（帳戶A）…", "編輯（帳戶B）…", "打開筆記（帳戶A）", "打開筆記（帳戶B）"],
 	);
 
 	(el.querySelectorAll(".sv-list-tab")[2] as HTMLButtonElement).click();
@@ -163,9 +166,9 @@ test("多個清單：分頁、切換、全部合併、新增到目前清單、�
 	menu = (globalThis as any).__lastMenu;
 	assert.deepEqual(
 		menu.items.map((i: { title: string }) => i.title),
-		["編輯…", "打開筆記", "移到其他清單…", "加到其他清單…", "從「帳戶B」刪除…"],
+		["走勢圖", "編輯…", "打開筆記", "移到其他清單…", "加到其他清單…", "從「帳戶B」刪除…"],
 	);
-	menu.items[3].cb();
+	menu.items[4].cb();
 	assert.equal(plugin.opened.at(-1), "modal:new@帳戶A:AMD");
 
 	(el.querySelector(".sv-list-more") as HTMLButtonElement).click();

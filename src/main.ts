@@ -14,12 +14,15 @@ import { watchNavbar } from "./navbar";
 import { SyncTrigger } from "./sync";
 import { DashboardView } from "./view";
 import { MARKET_VIEW, MarketsView } from "./marketview";
+import type { Row } from "./calc";
+import { StockChartModal, stockChartData } from "./stockchart";
 
 export default class StockViewPlugin extends Plugin {
 	settings: StockViewSettings = { ...DEFAULT_SETTINGS };
 	feed!: Feed;
 	ratings!: Ratings;
 	alarms!: Alarms;
+	chartData = stockChartData(); // 個股走勢圖的資料（快取；關掉視窗再打開不用重抓）
 	sync!: SyncTrigger;
 	private reloadTimer: number | null = null;
 
@@ -207,6 +210,11 @@ export default class StockViewPlugin extends Plugin {
 
 	openInbox(): void {
 		new AlarmInboxModal(this.app, this).open();
+	}
+
+	/** 個股走勢圖（點代號的選單「走勢圖」）。 */
+	openChart(row: Row): void {
+		new StockChartModal(this.app, this, row, this.chartData).open();
 	}
 
 	/**

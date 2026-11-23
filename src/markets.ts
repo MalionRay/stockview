@@ -143,6 +143,7 @@ export interface Series {
 	gmtoffset: number; // 交易所時區與 UTC 的差（秒）
 	session: Session;
 	domain: [number, number] | null; // 1日：x 軸用整個交易時段（還沒收盤時線只畫到一半）
+	ext?: [number, number][]; // 個股 1日含盤前盤後時：盤前、盤後的時間區段（圖上畫淺色底）
 }
 
 interface Period {
@@ -161,11 +162,33 @@ export class MarketError extends Error {
 	}
 }
 
-export function chartUrl(symbol: string, r: RangeDef): string {
-	return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${r.range}&interval=${r.interval}`;
+/** prePost：連盤前、盤後一起抓（個股走勢圖的 1日；指數沒有盤前盤後）。 */
+export function chartUrl(symbol: string, r: RangeDef, prePost = false): string {
+	return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${r.range}&interval=${r.interval}${prePost ? "&includePrePost=true" : ""}`;
 }
 
-export function parseSeries(json: unknown, r: RangeDef, nowSec = Date.now() / 1000): Series {
+type DayPeriods = { pre?: Period; regular?: Period; post?: Period };
+
+/**
+ * 資料那一天的盤前、盤中、盤後時段。includePrePost 時 meta.tradingPeriods 是 {pre, regular, post}，
+ * 每個都是「每天一個陣列」；取最後一天。沒有（或格式不同）就用 currentTradingPeriod
+ * ——但半夜、週末那個已經換成下一個交易日，對不上時 parseSeries 會放棄用時間當 x 軸。
+ */
+function dayPeriods(m: Record<string, unknown> & { currentTradingPeriod?: DayPeriods }): DayPeriods {
+	const tp = m.tradingPeriods as Record<string, unknown> | unknown[] | undefined;
+	if (tp && !Array.isArray(tp) && typeof tp === "object") {
+		const lastOf = (a: unknown): Period | undefined => {
+			if (!Array.isArray(a) || !a.length) return undefined;
+			const day = a[a.length - 1];
+			return (Array.isArray(day) ? day[0] : day) as Period | undefined;
+		};
+		const out = { pre: lastOf(tp.pre), regular: lastOf(tp.regular), post: lastOf(tp.post) };
+		if (valid(out.regular)) return out;
+	}
+	return m.currentTradingPeriod ?? {};
+}
+
+export function parseSeries(json: unknown, r: RangeDef, nowSec = Date.now() / 1000, prePost = false): Series {
 	const res = (json as { chart?: { result?: unknown[]; error?: { description?: string } } })?.chart;
 	const x = res?.result?.[0] as
 		| {
@@ -192,7 +215,16 @@ export function parseSeries(json: unknown, r: RangeDef, nowSec = Date.now() / 10
 	const first = points[0].t;
 	const lastT = points[points.length - 1].t;
 	let domain: [number, number] | null = null;
-	if (r.id === "1d" && valid(tp.regular) && first >= tp.regular.start - 3600 && lastT <= tp.regular.end + 3600)
+	let ext: [number, number][] | undefined;
+	const day = prePost && r.id === "1d" ? dayPeriods(m) : null;
+	if (day && valid(day.pre) && valid(day.regular) && valid(day.post) && first >= day.pre.start - 3600 && lastT <= day.post.end + 3600) {
+		// 盤前開始到盤後結束；盤前、盤後畫淺色底
+		domain = [Math.min(first, day.pre.start), Math.max(lastT, day.post.end)];
+		ext = [
+			[day.pre.start, day.regular.start],
+			[day.regular.end, day.post.end],
+		];
+	} else if (r.id === "1d" && valid(tp.regular) && first >= tp.regular.start - 3600 && lastT <= tp.regular.end + 3600)
 		domain = [Math.min(first, tp.regular.start), Math.max(lastT, tp.regular.end)];
 	return {
 		symbol: String(m.symbol ?? ""),
@@ -202,6 +234,7 @@ export function parseSeries(json: unknown, r: RangeDef, nowSec = Date.now() / 10
 		gmtoffset: num(m.gmtoffset) ?? 0,
 		session,
 		domain,
+		...(ext ? { ext } : {}),
 	};
 }
 
@@ -248,10 +281,10 @@ export function scaleSeries(s: Series, k: number): Series {
 	return { ...s, points: s.points.map((p) => ({ t: p.t, v: p.v * k })), base: f(s.base), last: f(s.last) };
 }
 
-export async function fetchChart(symbol: string, r: RangeDef): Promise<Series> {
+export async function fetchChart(symbol: string, r: RangeDef, prePost = false): Promise<Series> {
 	let res;
 	try {
-		res = await requestUrl({ url: chartUrl(symbol, r), method: "GET", throw: false });
+		res = await requestUrl({ url: chartUrl(symbol, r, prePost), method: "GET", throw: false });
 	} catch (e) {
 		throw new MarketError(`連不到 Yahoo（${String((e as Error)?.message ?? e).slice(0, 80)}）`);
 	}
@@ -264,7 +297,7 @@ export async function fetchChart(symbol: string, r: RangeDef): Promise<Series> {
 	} catch {
 		throw new MarketError("Yahoo 回應格式不對");
 	}
-	return parseSeries(json, r);
+	return parseSeries(json, r, undefined, prePost);
 }
 
 const MISSING_TTL = 6 * 3600_000;
